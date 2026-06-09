@@ -1,0 +1,91 @@
+from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from config import MINI_APP_URL
+
+MAIN_MENU = ReplyKeyboardMarkup(
+    [
+        ["💼 Area Committente", "🛠️ Area Esecutore"],
+        ["🤝 Nuovo Affare Diretto", "💰 Portafoglio"],
+        ["📂 I Miei Chat", "🌐 Apri Mini App"],
+        ["ℹ️ Supporto"],
+    ],
+    resize_keyboard=True,
+    one_time_keyboard=False,
+)
+
+CANCEL_KB = ReplyKeyboardMarkup(
+    [["❌ Annulla"]],
+    resize_keyboard=True,
+    one_time_keyboard=False,
+)
+
+CATEGORIES = [
+    "📝 Tesi & Ricerca",
+    "💻 Informatica",
+    "📐 Matematica & Fisica",
+    "🔬 Scienze",
+    "📚 Letteratura & Lingue",
+    "🎨 Grafica & Design",
+    "📊 Economia & Business",
+    "⚖️ Giurisprudenza",
+    "🏥 Medicina & Salute",
+    "🌐 Generale",
+]
+
+CATEGORY_KB = ReplyKeyboardMarkup(
+    [[c] for c in CATEGORIES] + [["❌ Annulla"]],
+    resize_keyboard=True,
+    one_time_keyboard=True,
+)
+
+
+def task_channel_kb(task_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🤝 Prendo l'incarico", callback_data=f"claim_{task_id}")]]
+    )
+
+
+def client_room_kb(task_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🔒 Conferma Completamento", callback_data=f"complete_{task_id}")],
+            [InlineKeyboardButton("🚨 Apri Controversia", callback_data=f"dispute_{task_id}")],
+        ]
+    )
+
+
+def executor_room_kb(task_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🚨 Apri Controversia", callback_data=f"dispute_{task_id}")]]
+    )
+
+
+def admin_dispute_kb(task_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🟢 Sblocca per Esecutore", callback_data=f"adm_exec_{task_id}")],
+            [InlineKeyboardButton("🔴 Rimborsa Committente", callback_data=f"adm_client_{task_id}")],
+        ]
+    )
+
+
+def topup_method_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("💳 CryptoBot (USDT)", callback_data="topup_crypto")],
+            [InlineKeyboardButton("⭐ Telegram Stars", callback_data="topup_stars")],
+        ]
+    )
+
+
+def mini_app_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🌐 Apri Mini App", web_app={"url": MINI_APP_URL})]]
+    )
+
+
+def skip_attachments_kb() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        [["⏭ Salta allegati"], ["❌ Annulla"]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )

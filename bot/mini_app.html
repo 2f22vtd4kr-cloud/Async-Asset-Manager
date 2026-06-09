@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Fai un Salto 🐸</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--tg-theme-bg-color, #1a1a2e);
+      color: var(--tg-theme-text-color, #eaeaea);
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .header .frog { font-size: 32px; }
+
+    .header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color, #eaeaea);
+    }
+
+    .header p {
+      font-size: 12px;
+      opacity: 0.6;
+    }
+
+    .card {
+      background: var(--tg-theme-secondary-bg-color, #16213e);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    .card-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      opacity: 0.5;
+      margin-bottom: 6px;
+    }
+
+    .balance {
+      font-size: 32px;
+      font-weight: 800;
+      color: #4ade80;
+    }
+
+    .balance-sub {
+      font-size: 13px;
+      opacity: 0.6;
+      margin-top: 2px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .stat-item {
+      background: var(--tg-theme-secondary-bg-color, #16213e);
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .stat-value { font-size: 22px; font-weight: 700; }
+    .stat-label { font-size: 11px; opacity: 0.5; margin-top: 2px; }
+
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 10px;
+      transition: opacity 0.15s;
+    }
+
+    .btn:active { opacity: 0.75; }
+
+    .btn-primary {
+      background: var(--tg-theme-button-color, #4ade80);
+      color: var(--tg-theme-button-text-color, #000);
+    }
+
+    .btn-secondary {
+      background: var(--tg-theme-secondary-bg-color, #16213e);
+      color: var(--tg-theme-text-color, #eaeaea);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin: 20px 0 10px;
+    }
+
+    .category-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .category-btn {
+      background: var(--tg-theme-secondary-bg-color, #16213e);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 10px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      text-align: center;
+      color: var(--tg-theme-text-color, #eaeaea);
+      transition: border-color 0.15s;
+    }
+
+    .category-btn:active { border-color: #4ade80; }
+
+    .task-card {
+      background: var(--tg-theme-secondary-bg-color, #16213e);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 8px;
+      border-left: 3px solid #4ade80;
+    }
+
+    .task-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+    .task-meta { font-size: 12px; opacity: 0.55; }
+    .task-reward { font-size: 14px; font-weight: 700; color: #4ade80; margin-top: 6px; }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      opacity: 0.5;
+    }
+
+    #tasks-container { margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="frog">🐸</span>
+    <div>
+      <h1>Fai un Salto</h1>
+      <p>Piattaforma Freelance Universitaria</p>
+    </div>
+  </div>
+
+  <!-- Wallet card -->
+  <div class="card">
+    <div class="card-title">💰 Portafoglio</div>
+    <div class="balance" id="balance">— USDT</div>
+    <div class="balance-sub" id="frozen">In escrow: — USDT</div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-item">
+      <div class="stat-value" id="stat-client">—</div>
+      <div class="stat-label">Task Committente</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value" id="stat-executor">—</div>
+      <div class="stat-label">Task Esecutore</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value" id="stat-rating-c">—</div>
+      <div class="stat-label">Rating Committente</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value" id="stat-rating-e">—</div>
+      <div class="stat-label">Rating Esecutore</div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <button class="btn btn-primary" onclick="syncProfile()">🔄 Aggiorna Profilo</button>
+  <button class="btn btn-secondary" onclick="showWalletTelemetry()">📊 Telemetria Portafoglio</button>
+
+  <!-- Browse tasks -->
+  <div class="section-title">📋 Esplora Incarichi</div>
+
+  <div class="category-grid">
+    <button class="category-btn" onclick="browseTasks()">🌐 Tutti</button>
+    <button class="category-btn" onclick="browseTasks('📝 Tesi & Ricerca')">📝 Tesi</button>
+    <button class="category-btn" onclick="browseTasks('💻 Informatica')">💻 Informatica</button>
+    <button class="category-btn" onclick="browseTasks('📐 Matematica & Fisica')">📐 Matematica</button>
+    <button class="category-btn" onclick="browseTasks('🎨 Grafica & Design')">🎨 Grafica</button>
+    <button class="category-btn" onclick="browseTasks('📊 Economia & Business')">📊 Economia</button>
+  </div>
+
+  <div id="tasks-container"></div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    // Set theme
+    document.documentElement.style.setProperty('--tg-color-scheme', tg.colorScheme);
+
+    function sendToBot(data) {
+      tg.sendData(JSON.stringify(data));
+    }
+
+    function syncProfile() {
+      sendToBot({ action: "sync_profile" });
+      tg.showAlert("Profilo sincronizzato! Torna alla chat per vedere i dati aggiornati.");
+    }
+
+    function showWalletTelemetry() {
+      sendToBot({ action: "wallet_telemetry" });
+      tg.showAlert("Richiesta telemetria inviata. Controlla la chat Telegram.");
+    }
+
+    function browseTasks(category = null) {
+      const container = document.getElementById("tasks-container");
+      container.innerHTML = '<div class="loading">⏳ Caricamento...</div>';
+      const payload = { action: "browse_tasks" };
+      if (category) payload.category = category;
+      sendToBot(payload);
+      container.innerHTML = '<div class="loading">📡 Risultati inviati nella chat Telegram.</div>';
+    }
+
+    // On init: try to load profile from initData
+    tg.onEvent("viewportChanged", () => { tg.expand(); });
+
+    // Populate with placeholder data until synced
+    document.getElementById("balance").textContent = "Sincronizza ↑";
+    document.getElementById("frozen").textContent = "Premi Aggiorna Profilo";
+  </script>
+</body>
+</html>
