@@ -84,6 +84,24 @@ def direct_deal_offer_kb(task_id: int, token: str) -> InlineKeyboardMarkup:
     )
 
 
+def rating_kb(task_id: int, target_role: str) -> InlineKeyboardMarkup:
+    """target_role: 'exec' (rate executor) or 'client' (rate client)."""
+    row = [
+        InlineKeyboardButton(f"{'⭐' * n}", callback_data=f"rate_{target_role}_{task_id}_{n}")
+        for n in range(1, 6)
+    ]
+    return InlineKeyboardMarkup([row])
+
+
+def task_payment_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("💵 Paga da Saldo USDT", callback_data="task_pay_usdt")],
+            [InlineKeyboardButton("⭐ Paga con Telegram Stars", callback_data="task_pay_stars")],
+        ]
+    )
+
+
 def skip_attachments_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [["⏭ Salta allegati"], ["❌ Annulla"]],

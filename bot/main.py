@@ -18,7 +18,7 @@ from telegram.ext import (
 )
 
 from config import BOT_TOKEN, CRYPTOBOT_TOKEN
-from database import init_db, get_user, credit_balance, DB_PATH
+from database import init_db, get_user, credit_balance
 from utils import setup_logging
 from states import (
     TASK_TITLE, TASK_CATEGORY, TASK_DEADLINE, TASK_ATTACHMENTS, TASK_REWARD,
@@ -37,6 +37,8 @@ from handlers.committente import (
     task_reward_received,
     cancel_wizard,
     my_tasks_client_callback,
+    task_pay_usdt_callback,
+    task_pay_stars_callback,
 )
 from handlers.esecutore import (
     area_esecutore,
@@ -73,6 +75,7 @@ from handlers.direct import (
     direct_accept_callback,
     direct_decline_callback,
 )
+from handlers.rating import rate_executor_callback, rate_client_callback
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +83,7 @@ CRYPTOBOT_API = "https://pay.crypt.bot/api"
 
 
 # ──────────────────────────────────────────────
-# CryptoBot invoice poller
+# CryptoBot invoice poller (background)
 # ──────────────────────────────────────────────
 
 async def cryptobot_invoice_poller(app: Application) -> None:
@@ -98,8 +101,7 @@ async def cryptobot_invoice_poller(app: Application) -> None:
                     data = await resp.json()
 
             if data.get("ok"):
-                invoices = data.get("result", {}).get("items", [])
-                for inv in invoices:
+                for inv in data.get("result", {}).get("items", []):
                     inv_id = inv.get("invoice_id")
                     if inv_id in processed_ids:
                         continue
@@ -144,7 +146,7 @@ async def cryptobot_invoice_poller(app: Application) -> None:
 
 
 # ──────────────────────────────────────────────
-# /start — handles both normal start and deep links
+# /start — handles normal start and deep links
 # ──────────────────────────────────────────────
 
 async def start_router(update: Update, context) -> None:
@@ -160,19 +162,15 @@ async def start_router(update: Update, context) -> None:
 # ──────────────────────────────────────────────
 
 def build_task_wizard() -> ConversationHandler:
-    media_filter = (
-        filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO
-    )
+    media = filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO
     return ConversationHandler(
         entry_points=[CallbackQueryHandler(start_task_wizard, pattern="^start_task_wizard$")],
         states={
-            TASK_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, task_title_received)],
-            TASK_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, task_category_received)],
-            TASK_DEADLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, task_deadline_received)],
-            TASK_ATTACHMENTS: [
-                MessageHandler((media_filter | filters.TEXT) & ~filters.COMMAND, task_attachment_received)
-            ],
-            TASK_REWARD: [MessageHandler(filters.TEXT & ~filters.COMMAND, task_reward_received)],
+            TASK_TITLE:       [MessageHandler(filters.TEXT & ~filters.COMMAND, task_title_received)],
+            TASK_CATEGORY:    [MessageHandler(filters.TEXT & ~filters.COMMAND, task_category_received)],
+            TASK_DEADLINE:    [MessageHandler(filters.TEXT & ~filters.COMMAND, task_deadline_received)],
+            TASK_ATTACHMENTS: [MessageHandler((media | filters.TEXT) & ~filters.COMMAND, task_attachment_received)],
+            TASK_REWARD:      [MessageHandler(filters.TEXT & ~filters.COMMAND, task_reward_received)],
         },
         fallbacks=[
             MessageHandler(filters.Regex("^❌ Annulla$"), cancel_wizard),
@@ -187,20 +185,16 @@ def build_task_wizard() -> ConversationHandler:
 # ──────────────────────────────────────────────
 
 def build_direct_wizard() -> ConversationHandler:
-    media_filter = (
-        filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO
-    )
+    media = filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO
     return ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^🤝 Nuovo Affare Diretto$"), direct_start)],
         states={
-            DIRECT_TARGET: [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_target_received)],
-            DIRECT_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_title_received)],
-            DIRECT_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_category_received)],
-            DIRECT_DEADLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_deadline_received)],
-            DIRECT_ATTACHMENTS: [
-                MessageHandler((media_filter | filters.TEXT) & ~filters.COMMAND, direct_attachment_received)
-            ],
-            DIRECT_REWARD: [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_reward_received)],
+            DIRECT_TARGET:      [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_target_received)],
+            DIRECT_TITLE:       [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_title_received)],
+            DIRECT_CATEGORY:    [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_category_received)],
+            DIRECT_DEADLINE:    [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_deadline_received)],
+            DIRECT_ATTACHMENTS: [MessageHandler((media | filters.TEXT) & ~filters.COMMAND, direct_attachment_received)],
+            DIRECT_REWARD:      [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_reward_received)],
         },
         fallbacks=[
             MessageHandler(filters.Regex("^❌ Annulla$"), direct_cancel),
@@ -211,13 +205,13 @@ def build_direct_wizard() -> ConversationHandler:
 
 
 # ──────────────────────────────────────────────
-# Text router: Reply Keyboard + active deal proxy
+# Text router: Reply Keyboard + deal proxy
 # ──────────────────────────────────────────────
 
 async def text_router(update: Update, context) -> None:
     text = update.message.text
 
-    # Pending top-up input states take priority
+    # Pending top-up input takes priority
     if context.user_data.get("awaiting_crypto_topup"):
         await handle_crypto_amount(update, context)
         return
@@ -236,7 +230,7 @@ async def text_router(update: Update, context) -> None:
     elif text == "ℹ️ Supporto":
         await support(update, context)
     else:
-        # Check if user is in an active deal — route through proxy
+        # Check active deal session — route through anonymous proxy
         from database import get_session_by_user
         session = await get_session_by_user(update.effective_user.id)
         if session:
@@ -264,33 +258,49 @@ def main() -> None:
         .build()
     )
 
-    # ConversationHandlers first (highest priority)
+    # ── ConversationHandlers (highest priority) ───────────────────────────
     app.add_handler(build_task_wizard())
     app.add_handler(build_direct_wizard())
 
-    # Commands
-    app.add_handler(CommandHandler("start", start_router))
+    # ── Commands ──────────────────────────────────────────────────────────
+    app.add_handler(CommandHandler("start",    start_router))
     app.add_handler(CommandHandler("prelievo", prelievo))
-    app.add_handler(CommandHandler("stats", admin_stats))
+    app.add_handler(CommandHandler("stats",    admin_stats))
 
-    # Inline callback queries
+    # ── Task lifecycle callbacks ──────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(claim_task_callback,       pattern=r"^claim_\d+$"))
     app.add_handler(CallbackQueryHandler(complete_task_callback,    pattern=r"^complete_\d+$"))
     app.add_handler(CallbackQueryHandler(open_dispute_callback,     pattern=r"^dispute_\d+$"))
+
+    # ── Admin dispute resolution ──────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(admin_release_executor,    pattern=r"^adm_exec_\d+$"))
     app.add_handler(CallbackQueryHandler(admin_refund_client,       pattern=r"^adm_client_\d+$"))
+
+    # ── Task payment method ───────────────────────────────────────────────
+    app.add_handler(CallbackQueryHandler(task_pay_usdt_callback,    pattern="^task_pay_usdt$"))
+    app.add_handler(CallbackQueryHandler(task_pay_stars_callback,   pattern="^task_pay_stars$"))
+
+    # ── Wallet top-up ─────────────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(topup_crypto_callback,     pattern="^topup_crypto$"))
     app.add_handler(CallbackQueryHandler(topup_stars_callback,      pattern="^topup_stars$"))
+
+    # ── My tasks ──────────────────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(my_tasks_client_callback,  pattern="^my_tasks_client$"))
     app.add_handler(CallbackQueryHandler(my_tasks_executor_callback,pattern="^my_tasks_executor$"))
+
+    # ── Direct deal ───────────────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(direct_accept_callback,    pattern=r"^direct_accept_\d+_\w+$"))
     app.add_handler(CallbackQueryHandler(direct_decline_callback,   pattern=r"^direct_decline_\d+_\w+$"))
 
-    # Payments
+    # ── Rating system ─────────────────────────────────────────────────────
+    app.add_handler(CallbackQueryHandler(rate_executor_callback,    pattern=r"^rate_exec_\d+_[1-5]$"))
+    app.add_handler(CallbackQueryHandler(rate_client_callback,      pattern=r"^rate_client_\d+_[1-5]$"))
+
+    # ── Telegram Stars payments ───────────────────────────────────────────
     app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
 
-    # Generic text + media router (Reply Keyboard & proxy)
+    # ── Generic text + media router ───────────────────────────────────────
     app.add_handler(
         MessageHandler(
             (
@@ -307,7 +317,7 @@ def main() -> None:
         )
     )
 
-    # Unknown commands
+    # ── Unknown commands ──────────────────────────────────────────────────
     app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
     logger.info("Bot in polling...")

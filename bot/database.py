@@ -347,6 +347,38 @@ async def get_user_tasks_as_executor(user_id: int) -> list:
             return [dict(r) for r in rows]
 
 
+async def update_rating(telegram_id: int, role: str, new_star: int) -> None:
+    """Weighted running-average update of client_rating or executor_rating."""
+    col_r = f"{role}_rating"
+    col_c = f"{role}_reviews_count"
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            f"SELECT {col_r}, {col_c} FROM users WHERE telegram_id = ?", (telegram_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+        if not row:
+            return
+        current, count = row
+        new_count = count + 1
+        new_rating = round((current * count + new_star) / new_count, 2)
+        await db.execute(
+            f"UPDATE users SET {col_r} = ?, {col_c} = ? WHERE telegram_id = ?",
+            (new_rating, new_count, telegram_id),
+        )
+        await db.commit()
+
+
+async def freeze_funds_direct(telegram_id: int, amount: float) -> None:
+    """Increment frozen_usdt directly (used when payment bypasses the internal balance)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE users SET frozen_usdt = frozen_usdt + ?, "
+            "total_tasks_client = total_tasks_client + 1 WHERE telegram_id = ?",
+            (amount, telegram_id),
+        )
+        await db.commit()
+
+
 async def flag_user_if_needed(telegram_id: int) -> None:
     """Shadow-ban user if dispute ratio > 30% or disputes_lost >= 3."""
     async with aiosqlite.connect(DB_PATH) as db:

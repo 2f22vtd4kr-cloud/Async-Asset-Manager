@@ -181,3 +181,7 @@ async def complete_task_callback(update: Update, context: ContextTypes.DEFAULT_T
         )
     except Exception as e:
         logger.error("Impossibile notificare esecutore: %s", e)
+
+    # Prompt both parties to rate each other
+    from handlers.rating import prompt_ratings
+    await prompt_ratings(bot, task_id, task["client_id"], task["executor_id"])

@@ -140,6 +140,10 @@ async def admin_release_executor(update: Update, context: ContextTypes.DEFAULT_T
         except Exception:
             pass
 
+    # Prompt both parties to rate each other
+    from handlers.rating import prompt_ratings
+    await prompt_ratings(bot, task_id, task["client_id"], task["executor_id"])
+
     await query.message.edit_text(
         query.message.text + f"\n\n✅ <b>Risolto: fondi rilasciati all'esecutore.</b>",
         parse_mode="HTML",
@@ -188,6 +192,10 @@ async def admin_refund_client(update: Update, context: ContextTypes.DEFAULT_TYPE
             await bot.send_message(chat_id=party_id, text=msg, reply_markup=MAIN_MENU)
         except Exception:
             pass
+
+    # Prompt both parties to rate each other
+    from handlers.rating import prompt_ratings
+    await prompt_ratings(bot, task_id, task["client_id"], task["executor_id"])
 
     await query.message.edit_text(
         query.message.text + f"\n\n🔴 <b>Risolto: rimborso al committente.</b>",
