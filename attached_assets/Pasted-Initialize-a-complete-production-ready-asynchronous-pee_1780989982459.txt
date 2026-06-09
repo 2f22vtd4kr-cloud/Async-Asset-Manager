@@ -1,0 +1,165 @@
+Initialize a complete, production-ready, asynchronous peer-to-peer (P2P) freelance escrow platform tailored for the Italian university market, named "Fai un Salto" (🐸). 
+
+CRITICAL DIRECTIVES: Absolutely NO mock balances or testing simulations are permitted. All default user balances MUST initialize strictly at 0.0 USDT. Every single financial operation must be structurally atomic (BEGIN/COMMIT/ROLLBACK) with absolute state rollbacks on network or API failures.
+
+Establish the workspace structure across these modular files:
+- `config.py` (Secure loading of tokens and conversion rates)
+- `database.py` (Asynchronous SQLite database schema, indices, and atomic transaction queries via aiosqlite)
+- `keyboards.py` (Persistent reply matrices and inline category components)
+- `states.py` (FSM StateGroup mappings for python-telegram-bot v20+)
+- `utils.py` (Input validation middleware, logging, and escrow math calculations)
+- `handlers/common.py` (Onboarding handlers, /start, and main navigational routes)
+- `handlers/committente.py` (4-step posting wizard and task lifecycle controls)
+- `handlers/esecutore.py` (Channel sync ledger operations and job claiming)
+- `handlers/bridge.py` (Anonymized proxy chat bridge engine and room lifecycle hooks)
+- `handlers/payments.py` (Dual payment tracks: CryptoBot + Telegram Stars, and /prelievo gateway)
+- `handlers/admin.py` (Administrative dispute arbitration logic and data diagnostics)
+- `handlers/miniapp.py` (Telegram Mini App WebApp API hooks and asset servers)
+- `main.py` (Application initialization loop and asynchronous update polling)
+
+---
+
+### 1. CONFIGURATION LAYER (config.py)
+Configure `config.py` to securely read from Replit Secrets:
+- `BOT_TOKEN`, `TELEGRAM_CHANNEL_ID`, `ADMIN_TG_ID`, `CRYPTOBOT_TOKEN`
+- Declare the configurable parameter: `STAR_TO_USDT_RATE = 0.02` (Defining the strict financial conversion index from Stars to USDT platform balance).
+
+---
+
+### 2. CORE STORAGE ARCHITECTURE (database.py)
+Initialize the database layer asynchronously using `aiosqlite`. All updates impacting balances or statuses must execute within explicit context-managed transactions (`async with db.execute("BEGIN"):`):
+
+CREATE TABLE IF NOT EXISTS users (
+    telegram_id INTEGER PRIMARY KEY,
+    username TEXT,
+    client_rating REAL DEFAULT 5.0,
+    executor_rating REAL DEFAULT 5.0,
+    client_reviews_count INTEGER DEFAULT 0,
+    executor_reviews_count INTEGER DEFAULT 0,
+    balance_usdt REAL DEFAULT 0.0, -- MANDATORY ZERO INITIALIZATION
+    frozen_usdt REAL DEFAULT 0.0,
+    is_blocked INTEGER DEFAULT 0,
+    is_shadow_banned INTEGER DEFAULT 0,
+    disputes_initiated INTEGER DEFAULT 0,
+    disputes_lost INTEGER DEFAULT 0,
+    total_tasks_client INTEGER DEFAULT 0,
+    total_tasks_executor INTEGER DEFAULT 0,
+    notification_categories TEXT DEFAULT '[]', -- JSON string array of interest tags
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+    task_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_message_id INTEGER DEFAULT NULL,
+    client_id INTEGER,
+    executor_id INTEGER DEFAULT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    deadline TEXT,
+    category TEXT DEFAULT 'Generale',
+    attachments TEXT DEFAULT NULL, -- JSON string array of string file_ids
+    reward_gross REAL NOT NULL,
+    reward_net REAL NOT NULL,
+    status TEXT CHECK(status IN ('open', 'in_progress', 'completed', 'dispute', 'cancelled')),
+    is_direct INTEGER DEFAULT 0,
+    target_executor_identity TEXT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    claimed_at TIMESTAMP DEFAULT NULL,
+    completed_at TIMESTAMP DEFAULT NULL,
+    disputed_at TIMESTAMP DEFAULT NULL
+);
+
+CREATE TABLE IF NOT EXISTS deal_sessions (
+    session_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER UNIQUE,
+    client_id INTEGER,
+    executor_id INTEGER,
+    room_token TEXT UNIQUE,
+    status TEXT CHECK(status IN ('active', 'closed', 'disputed')),
+    initialized_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS deal_messages (
+    message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER,
+    sender_id INTEGER,
+    message_type TEXT,
+    file_id TEXT DEFAULT NULL,
+    content_preview TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS admin_revenue (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    total_collected_fees REAL DEFAULT 0.0
+);
+
+Build database indices on `tasks(status)`, `tasks(client_id)`, `tasks(executor_id)`, and `deal_sessions(room_token)`. Provide transaction wrappers for `freeze_funds()`, `release_to_executor()`, and `refund_client()`.
+
+---
+
+### 3. NAVIGATION & TASK POSTING FLOWS (handlers/committente.py & esecutore.py)
+- Build a persistent Italian Reply Menu:
+  `💼 Area Committente | 🛠️ Area Esecutore`
+  `🤝 Nuovo Affare Diretto | 💰 Portafoglio`
+  `📂 I Miei Chat | 🌐 Apri Mini App`
+  `ℹ️ Supporto`
+
+- **4-Step Creation Wizard (Committente):** Collects Title, Category/Deadline, File Attachments (up to 50MB, stored as JSON), and Gross Reward. 
+- Ensure FSM middleware blocks root reply menu clicks during active states, forcing the user to complete the step or hit `❌ Annulla`.
+- Enforce the **10% monetization split**: Gross Cost is debited from `balance_usdt` and moved to `frozen_usdt`. 
+- **Channel Sync:** Post to the public storefront with the tag `#PostProtetto` and an inline `[🤝 Prendo l'incarico]` button. On click, verify availability, set state to `in_progress`, flip the channel caption to "🔴 In corso", and remove the inline buttons completely to prevent race conditions.
+
+---
+
+### 4. ANONYMIZED CHAT PROXY ENGINE (handlers/bridge.py)
+- When a task is claimed or a direct deal is accepted, generate a unique session token. 
+- Intercept and cross-route all communications between parties using `copy_message`. Prepend messages with "📩 Messaggio dall'Esecutore:" or "dal Committente:". Strip out all native user profile links and usernames to protect privacy.
+- Block hazardous executable files (`.exe`, `.sh`, `.bat`).
+- Maintain a floating control panel after message transfers: Client sees `[🔒 Conferma Completamento]` and `[🚨 Apri Controversia]`. Executor sees `[🚨 Apri Controversia]`.
+
+---
+
+### 5. ENHANCED DISPUTE ARBITRATION SYSTEM (handlers/admin.py)
+- When either party clicks `[🚨 Apri Controversia]`:
+  1. Instantly tear down the dynamic routing keys in `deal_sessions` (set status to `'disputed'`).
+  2. Query the entire transaction history from `deal_messages` and compile all task data and attachments.
+  3. Route the comprehensive investigative audit package straight to `ADMIN_TG_ID` along with these inline resolution hooks:
+     - `[🟢 Sblocca per Esecutore]`: Triggers the atomic 90/10 escrow split. Credits 90% to the worker's balance, routes the 10% platform fee to `admin_revenue`, increments the client's `disputes_lost` metric, and closes the room.
+     - `[🔴 Rimborsa Committente]`: Triggers a full transaction rollback. Restores 100% of the gross asset pool back to the client's active `balance_usdt`, sets the task to `cancelled`, increments the executor's `disputes_lost` counter, and closes the room.
+- If a user's dispute-to-task ratio exceeds 30% or their `disputes_lost` count passes a threshold, auto-flag their account for manual administrative review and shadow-ban them.
+
+---
+
+### 6. BI-LATERAL PRODUCTION PAYMENTS ENGINE (handlers/payments.py)
+
+#### Top-up Track A: CryptoBot (USDT Gateway)
+- When a user inputs an amount to buy USDT via their card/bank account (Visa, Mastercard, Revolut, PostePay, etc.), make an asynchronous POST call to `https://pay.crypt.bot/api/createInvoice`.
+- Pass headers: `Crypto-Pay-API-Token: {CRYPTOBOT_TOKEN}`. Pass JSON body: `asset: "USDT"`, `amount: "{amount}"`, and embed the user's `telegram_id` into the `payload` string.
+- Return the `pay_url` as an inline button titled: "💳 Paga via CryptoBot P2P".
+
+#### Top-up Track B: Telegram Stars (In-App Purchases XTR Gateway)
+- When a user opts to top up via Telegram Stars, invoke the bot's native `send_invoice` method using the currency parameter `"XTR"`.
+- Set the prices array based on the target USDT amount divided by the configured `STAR_TO_USDT_RATE`.
+- Upon catching the successful `PreCheckoutQueryHandler` and eventual `SuccessfulPayment` notification object, isolate the token total. Calculate the asset value using `Stars * STAR_TO_USDT_RATE`. 
+- Deduct the platform's 10% structural monetization fee immediately, route it to `admin_revenue`, and credit the remaining 90% directly to the user's active database row `balance_usdt`. Notify them instantly in Italian.
+
+#### Production On-Demand Withdrawals (/prelievo)
+- Implement a user-facing asset extraction command matching the layout format: `/prelievo <amount>`.
+- Perform a strict validation check against the user's live database row `balance_usdt`. If the requested amount is greater than their unfrozen funds, abort and reply: "❌ Saldo insufficiente."
+- If valid, immediately deduct the amount from their internal database row `balance_usdt`.
+- Trigger an asynchronous POST API call to CryptoBot's secure outbound transfer endpoint: `https://pay.crypt.bot/api/transfer`. Pass parameters: `user_id: {user_telegram_id}`, `asset: "USDT"`, `amount: {validated_amount}`, and pass a unique string UUID as `spend_id` to enforce absolute request idempotency.
+- If the transfer confirms successfully, finalize the database rows. If it fails, trigger an absolute transaction rollback, restore the funds back to the user's `balance_usdt`, and send a notification: "⚠️ Errore di rete CryptoBot. L'importo è stato riaccreditato al tuo saldo interno."
+
+---
+
+### 7. TELEGRAM MINI APP (TMA) INTEGRATION HOOKS (handlers/miniapp.py)
+- Create `handlers/miniapp.py` to support launching a web application overlay interface.
+- Configure the root navigational keyboard layout to house the button "🌐 Apri Mini App", which points directly to an active WebApp target URL.
+- Write a placeholder file named `mini_app.html` within the workspace using the Telegram WebApp JavaScript SDK script framework (`https://telegram.org/js/telegram-web-app.js`).
+- Write the input handlers within `handlers/miniapp.py` to securely listen for, decode, and ingest incoming JSON strings passed back from the client-side Mini App via the `web_app_data` event (e.g., handling profile synchronization, wallet telemetry displays, or job browsing actions).
+
+---
+
+### 8. APPLICATION INITIALIZATION & LAUNCH (main.py)
+Assemble all modular conversation handlers, proxy interceptors, error fallbacks, and command systems cleanly within `main.py`. Ensure that on startup, the environment initializes the database tables and indices correctly. Include an explicit background polling thread tracking `getInvoices` updates from CryptoBot, automatically matching completed invoice IDs with corresponding payload metadata to increment user wallets in real-time. Ensure all external network connections use reliable try/except exception wrappers to shield the application from crashing during remote API drops. Run the system loop.
