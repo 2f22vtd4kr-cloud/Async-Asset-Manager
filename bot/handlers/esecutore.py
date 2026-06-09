@@ -21,16 +21,16 @@ async def area_esecutore(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     reviews = user["executor_reviews_count"] if user else 0
 
     text = (
-        "🛠️ <b>Area Esecutore</b>\n\n"
-        f"💰 Saldo disponibile: <b>{bal:.2f} USDT</b>\n"
-        f"⭐ Rating: <b>{rating:.1f}/5.0</b> ({reviews} recensioni)\n\n"
-        f"⚙️ Incarichi attivi: {len(active)}\n"
-        f"✅ Completati: {len(completed)}\n\n"
-        "Visita il canale per trovare nuovi incarichi disponibili."
+        "🛠️ <b>Auftragnehmer-Bereich</b>\n\n"
+        f"💰 Verfügbares Guthaben: <b>{bal:.2f} USDT</b>\n"
+        f"⭐ Bewertung: <b>{rating:.1f}/5.0</b> ({reviews} Bewertungen)\n\n"
+        f"⚙️ Aktive Aufträge: {len(active)}\n"
+        f"✅ Abgeschlossen: {len(completed)}\n\n"
+        "Besuche den Kanal, um neue verfügbare Aufträge zu finden."
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📢 Vai al Canale Incarichi", url=f"https://t.me/c/{str(TELEGRAM_CHANNEL_ID).replace('-100', '')}")],
-        [InlineKeyboardButton("📋 I Miei Incarichi", callback_data="my_tasks_executor")],
+        [InlineKeyboardButton("📢 Zum Auftragskanal", url=f"https://t.me/c/{str(TELEGRAM_CHANNEL_ID).replace('-100', '')}")],
+        [InlineKeyboardButton("📋 Meine Aufträge", callback_data="my_tasks_executor")],
     ])
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
@@ -44,21 +44,21 @@ async def claim_task_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     task = await db.get_task(task_id)
     if not task:
-        await query.answer("❌ Incarico non trovato.", show_alert=True)
+        await query.answer("❌ Auftrag nicht gefunden.", show_alert=True)
         return
 
     if task["status"] != "open":
-        await query.answer("🔴 Questo incarico non è più disponibile.", show_alert=True)
+        await query.answer("🔴 Dieser Auftrag ist nicht mehr verfügbar.", show_alert=True)
         return
 
     if task["client_id"] == user_id:
-        await query.answer("⚠️ Non puoi prendere il tuo stesso incarico.", show_alert=True)
+        await query.answer("⚠️ Du kannst deinen eigenen Auftrag nicht annehmen.", show_alert=True)
         return
 
     # Check if user is shadow-banned
     executor = await db.get_or_create_user(user_id)
     if executor.get("is_shadow_banned"):
-        await query.answer("🚫 Operazione non disponibile.", show_alert=True)
+        await query.answer("🚫 Vorgang nicht verfügbar.", show_alert=True)
         return
 
     # Atomically mark as in_progress
@@ -70,7 +70,7 @@ async def claim_task_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         ) as cursor:
             row = await cursor.fetchone()
         if not row or row[0] != "open":
-            await query.answer("🔴 Incarico già preso.", show_alert=True)
+            await query.answer("🔴 Auftrag bereits vergeben.", show_alert=True)
             return
         await conn.execute("BEGIN")
         await conn.execute(
@@ -87,16 +87,16 @@ async def claim_task_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 chat_id=TELEGRAM_CHANNEL_ID,
                 message_id=task["channel_message_id"],
                 text=(
-                    f"📋 <b>{task['title']}</b> #PostProtetto\n\n"
-                    f"🔴 <b>In corso</b> — Incarico assegnato\n"
-                    f"💰 Compenso: {task['reward_gross']:.2f} USDT\n"
-                    f"🆔 Task #{task_id}"
+                    f"📋 <b>{task['title']}</b> #Auftrag\n\n"
+                    f"🔴 <b>In Bearbeitung</b> — Auftrag vergeben\n"
+                    f"💰 Vergütung: {task['reward_gross']:.2f} USDT\n"
+                    f"🆔 Auftrag #{task_id}"
                 ),
                 parse_mode="HTML",
                 reply_markup=None,
             )
         except Exception as e:
-            logger.warning("Impossibile aggiornare il messaggio canale: %s", e)
+            logger.warning("Kanalpost konnte nicht aktualisiert werden: %s", e)
 
     # Create deal session
     import uuid
@@ -106,16 +106,16 @@ async def claim_task_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Notify both parties
     bot = update.get_bot()
     notify_client = (
-        f"🤝 <b>Incarico accettato!</b>\n\n"
-        f"Task #{task_id} — {task['title']}\n"
-        "Un esecutore ha accettato il tuo incarico. La chat è ora attiva.\n"
-        "Scrivi qui per comunicare in modo anonimo."
+        f"🤝 <b>Auftrag angenommen!</b>\n\n"
+        f"Auftrag #{task_id} — {task['title']}\n"
+        "Ein Auftragnehmer hat deinen Auftrag angenommen. Der Chat ist jetzt aktiv.\n"
+        "Schreibe hier, um anonym zu kommunizieren."
     )
     notify_executor = (
-        f"✅ <b>Hai preso l'incarico!</b>\n\n"
-        f"Task #{task_id} — {task['title']}\n"
-        f"💰 Compenso netto: <b>{task['reward_net']:.2f} USDT</b>\n"
-        "Scrivi qui per comunicare con il committente in modo anonimo."
+        f"✅ <b>Auftrag übernommen!</b>\n\n"
+        f"Auftrag #{task_id} — {task['title']}\n"
+        f"💰 Nettovergütung: <b>{task['reward_net']:.2f} USDT</b>\n"
+        "Schreibe hier, um anonym mit dem Auftraggeber zu kommunizieren."
     )
 
     from keyboards import client_room_kb, executor_room_kb
@@ -127,7 +127,7 @@ async def claim_task_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             reply_markup=client_room_kb(task_id),
         )
     except Exception as e:
-        logger.error("Impossibile notificare committente: %s", e)
+        logger.error("Auftraggeber konnte nicht benachrichtigt werden: %s", e)
 
     await query.message.reply_text(
         notify_executor, parse_mode="HTML", reply_markup=executor_room_kb(task_id)
@@ -140,7 +140,7 @@ async def my_tasks_executor_callback(update: Update, context: ContextTypes.DEFAU
     user_id = update.effective_user.id
     tasks = await db.get_user_tasks_as_executor(user_id)
     if not tasks:
-        await query.message.reply_text("📋 Nessun incarico preso finora.")
+        await query.message.reply_text("📋 Noch keine Aufträge übernommen.")
         return
     for t in tasks[:10]:
         await query.message.reply_text(format_task_summary(t), parse_mode="HTML")

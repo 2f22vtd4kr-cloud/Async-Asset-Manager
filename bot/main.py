@@ -173,7 +173,7 @@ def build_task_wizard() -> ConversationHandler:
             TASK_REWARD:      [MessageHandler(filters.TEXT & ~filters.COMMAND, task_reward_received)],
         },
         fallbacks=[
-            MessageHandler(filters.Regex("^❌ Annulla$"), cancel_wizard),
+            MessageHandler(filters.Regex("^❌ Abbrechen$"), cancel_wizard),
             CommandHandler("start", start_router),
         ],
         allow_reentry=True,
@@ -187,7 +187,7 @@ def build_task_wizard() -> ConversationHandler:
 def build_direct_wizard() -> ConversationHandler:
     media = filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO
     return ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^🤝 Nuovo Affare Diretto$"), direct_start)],
+        entry_points=[MessageHandler(filters.Regex("^🤝 Neues Direktgeschäft$"), direct_start)],
         states={
             DIRECT_TARGET:      [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_target_received)],
             DIRECT_TITLE:       [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_title_received)],
@@ -197,7 +197,7 @@ def build_direct_wizard() -> ConversationHandler:
             DIRECT_REWARD:      [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_reward_received)],
         },
         fallbacks=[
-            MessageHandler(filters.Regex("^❌ Annulla$"), direct_cancel),
+            MessageHandler(filters.Regex("^❌ Abbrechen$"), direct_cancel),
             CommandHandler("start", start_router),
         ],
         allow_reentry=True,
@@ -219,15 +219,15 @@ async def text_router(update: Update, context) -> None:
         await handle_stars_amount(update, context)
         return
 
-    if text == "💼 Area Committente":
+    if text == "💼 Auftraggeber-Bereich":
         await area_committente(update, context)
-    elif text == "🛠️ Area Esecutore":
+    elif text == "🛠️ Auftragnehmer-Bereich":
         await area_esecutore(update, context)
-    elif text == "💰 Portafoglio":
+    elif text == "💰 Wallet":
         await portafoglio(update, context)
-    elif text == "📂 I Miei Chat":
+    elif text == "📂 Meine Chats":
         await my_chats(update, context)
-    elif text == "ℹ️ Supporto":
+    elif text == "ℹ️ Support":
         await support(update, context)
     else:
         # Check active deal session — route through anonymous proxy

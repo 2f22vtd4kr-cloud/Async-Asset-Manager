@@ -14,31 +14,31 @@ CRYPTOBOT_API = "https://pay.crypt.bot/api"
 
 
 # ──────────────────────────────────────────────
-# Wallet dashboard
+# Wallet-Dashboard
 # ──────────────────────────────────────────────
 
 async def portafoglio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     user = await db.get_or_create_user(user_id, update.effective_user.username)
     text = (
-        "💰 <b>Portafoglio</b>\n\n"
-        f"💵 Saldo disponibile: <b>{user['balance_usdt']:.2f} USDT</b>\n"
-        f"🔒 In escrow: <b>{user['frozen_usdt']:.2f} USDT</b>\n\n"
-        "Ricarica o preleva:"
+        "💰 <b>Wallet</b>\n\n"
+        f"💵 Verfügbares Guthaben: <b>{user['balance_usdt']:.2f} USDT</b>\n"
+        f"🔒 Im Treuhand: <b>{user['frozen_usdt']:.2f} USDT</b>\n\n"
+        "Aufladen oder auszahlen:"
     )
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=topup_method_kb())
 
 
 # ──────────────────────────────────────────────
-# Top-up Track A: CryptoBot (USDT)
+# Aufladung Methode A: CryptoBot (USDT)
 # ──────────────────────────────────────────────
 
 async def topup_crypto_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     await query.message.reply_text(
-        "💳 <b>Ricarica via CryptoBot (USDT)</b>\n\n"
-        "Inserisci l'importo in USDT che vuoi ricaricare (es. <code>10.00</code>):",
+        "💳 <b>Aufladen via CryptoBot (USDT)</b>\n\n"
+        "Gib den USDT-Betrag ein, den du aufladen möchtest (z.B. <code>10.00</code>):",
         parse_mode="HTML",
     )
     context.user_data["awaiting_crypto_topup"] = True
@@ -48,7 +48,7 @@ async def handle_crypto_amount(update: Update, context: ContextTypes.DEFAULT_TYP
     amount = validate_reward(update.message.text)
     if not amount:
         await update.message.reply_text(
-            "⚠️ Importo non valido. Inserisci un numero positivo (es. <code>10.00</code>):",
+            "⚠️ Ungültiger Betrag. Gib eine positive Zahl ein (z.B. <code>10.00</code>):",
             parse_mode="HTML",
         )
         return
@@ -62,7 +62,7 @@ async def handle_crypto_amount(update: Update, context: ContextTypes.DEFAULT_TYP
         "asset": "USDT",
         "amount": str(amount),
         "payload": payload,
-        "description": f"Ricarica Fai un Salto — {amount} USDT",
+        "description": f"Aufladung Fai un Salto — {amount} USDT",
         "allow_comments": False,
         "allow_anonymous": False,
     }
@@ -78,37 +78,37 @@ async def handle_crypto_amount(update: Update, context: ContextTypes.DEFAULT_TYP
             pay_url = data["result"]["pay_url"]
             from telegram import InlineKeyboardMarkup, InlineKeyboardButton
             kb = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("💳 Paga via CryptoBot P2P", url=pay_url)]]
+                [[InlineKeyboardButton("💳 Zahlen via CryptoBot P2P", url=pay_url)]]
             )
             await update.message.reply_text(
-                f"✅ Fattura creata per <b>{amount:.2f} USDT</b>\n\n"
-                "Clicca il pulsante per completare il pagamento.\n"
-                "Il saldo verrà aggiornato automaticamente dopo la conferma.",
+                f"✅ Rechnung für <b>{amount:.2f} USDT</b> erstellt\n\n"
+                "Klicke den Button, um die Zahlung abzuschließen.\n"
+                "Das Guthaben wird nach Bestätigung automatisch aktualisiert.",
                 parse_mode="HTML",
                 reply_markup=kb,
             )
         else:
             logger.error("CryptoBot createInvoice error: %s", data)
             await update.message.reply_text(
-                "❌ Errore nella creazione della fattura CryptoBot. Riprova più tardi."
+                "❌ Fehler beim Erstellen der CryptoBot-Rechnung. Bitte später erneut versuchen."
             )
     except Exception as e:
         logger.error("CryptoBot request failed: %s", e)
-        await update.message.reply_text("⚠️ Errore di connessione con CryptoBot. Riprova.")
+        await update.message.reply_text("⚠️ Verbindungsfehler mit CryptoBot. Bitte erneut versuchen.")
 
 
 # ──────────────────────────────────────────────
-# Top-up Track B: Telegram Stars (XTR) — balance top-up
+# Aufladung Methode B: Telegram Stars (XTR)
 # ──────────────────────────────────────────────
 
 async def topup_stars_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     await query.message.reply_text(
-        "⭐ <b>Ricarica Saldo via Telegram Stars</b>\n\n"
-        f"Tasso: 1 Star = {STAR_TO_USDT_RATE} USDT\n"
-        "⚠️ Commissione piattaforma 10% applicata alla ricarica.\n\n"
-        "Inserisci l'importo in USDT che vuoi ricaricare (es. <code>5.00</code>):",
+        "⭐ <b>Guthaben via Telegram Stars aufladen</b>\n\n"
+        f"Kurs: 1 Star = {STAR_TO_USDT_RATE} USDT\n"
+        "⚠️ Es gilt eine Plattformgebühr von 10% auf die Aufladung.\n\n"
+        "Gib den USDT-Betrag ein, den du aufladen möchtest (z.B. <code>5.00</code>):",
         parse_mode="HTML",
     )
     context.user_data["awaiting_stars_topup"] = True
@@ -118,7 +118,7 @@ async def handle_stars_amount(update: Update, context: ContextTypes.DEFAULT_TYPE
     amount = validate_reward(update.message.text)
     if not amount:
         await update.message.reply_text(
-            "⚠️ Importo non valido. Inserisci un numero positivo (es. <code>5.00</code>):",
+            "⚠️ Ungültiger Betrag. Gib eine positive Zahl ein (z.B. <code>5.00</code>):",
             parse_mode="HTML",
         )
         return
@@ -129,8 +129,8 @@ async def handle_stars_amount(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     await context.bot.send_invoice(
         chat_id=user_id,
-        title="Ricarica Saldo Portafoglio",
-        description=f"Ricarica {amount:.2f} USDT su Fai un Salto (10% fee inclusa)",
+        title="Wallet-Guthaben aufladen",
+        description=f"{amount:.2f} USDT auf Fai un Salto aufladen (inkl. 10% Gebühr)",
         payload=f"stars_topup_{user_id}_{amount}",
         currency="XTR",
         prices=[LabeledPrice(label="Stars", amount=stars_needed)],
@@ -139,7 +139,7 @@ async def handle_stars_amount(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 # ──────────────────────────────────────────────
-# Pre-checkout handler (required for all Stars payments)
+# Pre-Checkout-Handler (für alle Stars-Zahlungen erforderlich)
 # ──────────────────────────────────────────────
 
 async def pre_checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -147,7 +147,7 @@ async def pre_checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 # ──────────────────────────────────────────────
-# Successful payment dispatcher
+# Erfolgreiche Zahlung
 # ──────────────────────────────────────────────
 
 async def successful_payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -156,19 +156,18 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     stars_paid = payment.total_amount
     payload = payment.invoice_payload
 
-    # ── Task escrow payment via Stars ──────────────────────────────────────
+    # ── Treuhand-Zahlung via Stars ──────────────────────────────────────────
     if payload.startswith("task_stars_"):
         pending = context.user_data.get("pending_task")
         if not pending:
             await update.message.reply_text(
-                "⚠️ Dati incarico non trovati. I tuoi Stars sono al sicuro — contatta il supporto.",
+                "⚠️ Auftragsdaten nicht gefunden. Deine Stars sind sicher — bitte Support kontaktieren.",
                 reply_markup=MAIN_MENU,
             )
             return
 
         gross = pending["gross"]
 
-        # Create task and freeze funds directly (Stars already paid externally)
         import aiosqlite
         from database import DB_PATH
         async with aiosqlite.connect(DB_PATH) as conn:
@@ -189,7 +188,6 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
                 ),
             )
             task_id = cursor.lastrowid
-            # Freeze directly without touching balance (Stars bypassed deposit)
             await conn.execute(
                 "UPDATE users SET frozen_usdt = frozen_usdt + ?, "
                 "total_tasks_client = total_tasks_client + 1 WHERE telegram_id = ?",
@@ -199,22 +197,21 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
 
         context.user_data.pop("pending_task", None)
 
-        # Post to channel
         from handlers.committente import _post_to_channel
         await _post_to_channel(update.get_bot(), task_id, pending)
 
         await update.message.reply_text(
-            f"⭐ <b>Pagamento Stars confermato!</b>\n\n"
-            f"🆔 Task #{task_id} — {pending['title']}\n"
-            f"⭐ Stars pagati: <b>{stars_paid}</b>\n"
-            f"💰 Escrow bloccato: <b>{gross:.2f} USDT</b>\n\n"
-            "L'incarico è ora visibile sul canale.",
+            f"⭐ <b>Stars-Zahlung bestätigt!</b>\n\n"
+            f"🆔 Auftrag #{task_id} — {pending['title']}\n"
+            f"⭐ Gezahlte Stars: <b>{stars_paid}</b>\n"
+            f"💰 Treuhand eingefroren: <b>{gross:.2f} USDT</b>\n\n"
+            "Der Auftrag ist jetzt im Kanal sichtbar.",
             parse_mode="HTML",
             reply_markup=MAIN_MENU,
         )
         return
 
-    # ── General Stars balance top-up ───────────────────────────────────────
+    # ── Allgemeine Stars-Guthabenaufladung ─────────────────────────────────
     if payload.startswith("stars_topup_"):
         gross_usdt = round(stars_paid * STAR_TO_USDT_RATE, 8)
         platform_fee = round(gross_usdt * PLATFORM_FEE_RATE, 8)
@@ -224,11 +221,11 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
         await db.add_admin_fee(platform_fee)
 
         await update.message.reply_text(
-            f"⭐ <b>Ricarica completata!</b>\n\n"
-            f"Stars pagati: <b>{stars_paid}</b>\n"
-            f"Valore lordo: {gross_usdt:.4f} USDT\n"
-            f"Commissione (10%): -{platform_fee:.4f} USDT\n"
-            f"💵 <b>Accreditato: {net_credit:.4f} USDT</b>",
+            f"⭐ <b>Aufladung abgeschlossen!</b>\n\n"
+            f"Gezahlte Stars: <b>{stars_paid}</b>\n"
+            f"Bruttowert: {gross_usdt:.4f} USDT\n"
+            f"Gebühr (10%): -{platform_fee:.4f} USDT\n"
+            f"💵 <b>Gutgeschrieben: {net_credit:.4f} USDT</b>",
             parse_mode="HTML",
             reply_markup=MAIN_MENU,
         )
@@ -238,7 +235,7 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
 
 
 # ──────────────────────────────────────────────
-# Withdrawal: /prelievo <amount>
+# Auszahlung: /auszahlung <betrag>
 # ──────────────────────────────────────────────
 
 async def prelievo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -247,8 +244,8 @@ async def prelievo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if not args:
         await update.message.reply_text(
-            "💸 <b>Prelievo</b>\n\nUso: <code>/prelievo &lt;importo&gt;</code>\n"
-            "Es: <code>/prelievo 10.00</code>",
+            "💸 <b>Auszahlung</b>\n\nVerwendung: <code>/prelievo &lt;Betrag&gt;</code>\n"
+            "Bsp: <code>/prelievo 10.00</code>",
             parse_mode="HTML",
         )
         return
@@ -256,7 +253,7 @@ async def prelievo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     amount = validate_reward(args[0])
     if not amount:
         await update.message.reply_text(
-            "⚠️ Importo non valido. Usa: <code>/prelievo 10.00</code>",
+            "⚠️ Ungültiger Betrag. Verwende: <code>/prelievo 10.00</code>",
             parse_mode="HTML",
         )
         return
@@ -265,15 +262,15 @@ async def prelievo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not user or user["balance_usdt"] < amount:
         bal = user["balance_usdt"] if user else 0.0
         await update.message.reply_text(
-            f"❌ Saldo insufficiente. Disponibile: <b>{bal:.2f} USDT</b>, "
-            f"richiesto: <b>{amount:.2f} USDT</b>.",
+            f"❌ Unzureichendes Guthaben. Verfügbar: <b>{bal:.2f} USDT</b>, "
+            f"angefordert: <b>{amount:.2f} USDT</b>.",
             parse_mode="HTML",
         )
         return
 
     ok = await db.debit_balance(user_id, amount)
     if not ok:
-        await update.message.reply_text("❌ Errore nella transazione. Riprova.")
+        await update.message.reply_text("❌ Transaktionsfehler. Bitte erneut versuchen.")
         return
 
     spend_id = str(uuid.uuid4())
@@ -283,7 +280,7 @@ async def prelievo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "asset": "USDT",
         "amount": str(amount),
         "spend_id": spend_id,
-        "comment": "Prelievo Fai un Salto",
+        "comment": "Auszahlung Fai un Salto",
         "disable_send_notification": False,
     }
 
@@ -296,8 +293,8 @@ async def prelievo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         if data.get("ok"):
             await update.message.reply_text(
-                f"✅ <b>Prelievo confermato!</b>\n\n"
-                f"💸 <b>{amount:.2f} USDT</b> trasferiti al tuo wallet CryptoBot.",
+                f"✅ <b>Auszahlung bestätigt!</b>\n\n"
+                f"💸 <b>{amount:.2f} USDT</b> an dein CryptoBot-Wallet überwiesen.",
                 parse_mode="HTML",
                 reply_markup=MAIN_MENU,
             )
@@ -305,9 +302,9 @@ async def prelievo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             raise Exception(f"CryptoBot transfer failed: {data}")
 
     except Exception as e:
-        logger.error("Prelievo fallito: %s", e)
+        logger.error("Auszahlung fehlgeschlagen: %s", e)
         await db.credit_balance(user_id, amount)
         await update.message.reply_text(
-            "⚠️ Errore di rete CryptoBot. L'importo è stato riaccreditato al tuo saldo interno.",
+            "⚠️ CryptoBot-Netzwerkfehler. Der Betrag wurde deinem internen Guthaben zurückgebucht.",
             reply_markup=MAIN_MENU,
         )

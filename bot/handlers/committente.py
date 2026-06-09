@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────
-# Area Committente dashboard
+# Auftraggeber-Dashboard
 # ──────────────────────────────────────────────
 
 async def area_committente(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -30,23 +30,23 @@ async def area_committente(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     rating = user["client_rating"] if user else 5.0
     reviews = user["client_reviews_count"] if user else 0
     text = (
-        "💼 <b>Area Committente</b>\n\n"
-        f"💰 Saldo disponibile: <b>{bal:.2f} USDT</b>\n"
-        f"🔒 In escrow: <b>{frozen:.2f} USDT</b>\n"
-        f"⭐ Rating: <b>{rating:.1f}/5.0</b> ({reviews} recensioni)\n\n"
-        f"📋 Incarichi aperti: {len(open_tasks)}\n"
-        f"⚙️ Incarichi in corso: {len(active_tasks)}\n\n"
-        "Usa <b>Pubblica Incarico</b> per creare un nuovo lavoro."
+        "💼 <b>Auftraggeber-Bereich</b>\n\n"
+        f"💰 Verfügbares Guthaben: <b>{bal:.2f} USDT</b>\n"
+        f"🔒 Im Treuhand: <b>{frozen:.2f} USDT</b>\n"
+        f"⭐ Bewertung: <b>{rating:.1f}/5.0</b> ({reviews} Bewertungen)\n\n"
+        f"📋 Offene Aufträge: {len(open_tasks)}\n"
+        f"⚙️ Laufende Aufträge: {len(active_tasks)}\n\n"
+        "Nutze <b>Auftrag veröffentlichen</b>, um einen neuen Job zu erstellen."
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📝 Pubblica Incarico", callback_data="start_task_wizard")],
-        [InlineKeyboardButton("📋 I Miei Incarichi", callback_data="my_tasks_client")],
+        [InlineKeyboardButton("📝 Auftrag veröffentlichen", callback_data="start_task_wizard")],
+        [InlineKeyboardButton("📋 Meine Aufträge", callback_data="my_tasks_client")],
     ])
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
 
 # ──────────────────────────────────────────────
-# 4-Step task creation wizard
+# 4-Schritt Auftrags-Assistent
 # ──────────────────────────────────────────────
 
 async def start_task_wizard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -61,8 +61,8 @@ async def start_task_wizard(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     context.user_data["attachments"] = []
 
     await send(
-        "📝 <b>Passo 1/4 — Titolo dell'incarico</b>\n\n"
-        "Scrivi un titolo chiaro e conciso per il tuo incarico:",
+        "📝 <b>Schritt 1/4 — Aufragstitel</b>\n\n"
+        "Schreibe einen klaren und prägnanten Titel für deinen Auftrag:",
         parse_mode="HTML",
         reply_markup=CANCEL_KB,
     )
@@ -70,20 +70,20 @@ async def start_task_wizard(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def task_title_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Annulla":
+    if update.message.text == "❌ Abbrechen":
         return await cancel_wizard(update, context)
 
     title = update.message.text.strip()
     if len(title) < 5 or len(title) > 200:
         await update.message.reply_text(
-            "⚠️ Il titolo deve essere tra 5 e 200 caratteri. Riprova:",
+            "⚠️ Der Titel muss zwischen 5 und 200 Zeichen lang sein. Nochmal versuchen:",
             reply_markup=CANCEL_KB,
         )
         return TASK_TITLE
 
     context.user_data["title"] = title
     await update.message.reply_text(
-        "🏷 <b>Passo 2/4 — Categoria & Scadenza</b>\n\nScegli la categoria:",
+        "🏷 <b>Schritt 2/4 — Kategorie & Frist</b>\n\nWähle die Kategorie:",
         parse_mode="HTML",
         reply_markup=CATEGORY_KB,
     )
@@ -91,12 +91,12 @@ async def task_title_received(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def task_category_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Annulla":
+    if update.message.text == "❌ Abbrechen":
         return await cancel_wizard(update, context)
 
     context.user_data["category"] = update.message.text
     await update.message.reply_text(
-        "📅 Inserisci la <b>scadenza</b> dell'incarico\n(es. <i>15 luglio 2025</i> o <i>entro 3 giorni</i>):",
+        "📅 Gib die <b>Frist</b> des Auftrags ein\n(z.B. <i>15. Juli 2025</i> oder <i>innerhalb von 3 Tagen</i>):",
         parse_mode="HTML",
         reply_markup=CANCEL_KB,
     )
@@ -104,14 +104,14 @@ async def task_category_received(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def task_deadline_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Annulla":
+    if update.message.text == "❌ Abbrechen":
         return await cancel_wizard(update, context)
 
     context.user_data["deadline"] = update.message.text.strip()
     await update.message.reply_text(
-        "📎 <b>Passo 3/4 — Allegati</b>\n\n"
-        "Invia file, immagini o documenti (fino a 50 MB ciascuno).\n"
-        "Quando hai finito premi <b>⏭ Salta allegati</b>.",
+        "📎 <b>Schritt 3/4 — Anhänge</b>\n\n"
+        "Sende Dateien, Bilder oder Dokumente (bis zu 50 MB pro Datei).\n"
+        "Wenn du fertig bist, drücke <b>⏭ Anhänge überspringen</b>.",
         parse_mode="HTML",
         reply_markup=skip_attachments_kb(),
     )
@@ -119,10 +119,10 @@ async def task_deadline_received(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def task_attachment_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Annulla":
+    if update.message.text == "❌ Abbrechen":
         return await cancel_wizard(update, context)
 
-    if update.message.text == "⏭ Salta allegati":
+    if update.message.text == "⏭ Anhänge überspringen":
         return await proceed_to_reward(update, context)
 
     file_id = None
@@ -133,7 +133,7 @@ async def task_attachment_received(update: Update, context: ContextTypes.DEFAULT
         file_name = doc.file_name or ""
         if is_blocked_file(file_name):
             await update.message.reply_text(
-                f"🚫 File <code>{file_name}</code> non consentito per sicurezza.",
+                f"🚫 Datei <code>{file_name}</code> aus Sicherheitsgründen nicht erlaubt.",
                 parse_mode="HTML",
             )
             return TASK_ATTACHMENTS
@@ -148,26 +148,26 @@ async def task_attachment_received(update: Update, context: ContextTypes.DEFAULT
     if file_id:
         atts = context.user_data.setdefault("attachments", [])
         if len(atts) >= 10:
-            await update.message.reply_text("⚠️ Massimo 10 allegati. Premi ⏭ per continuare.")
+            await update.message.reply_text("⚠️ Maximal 10 Anhänge. Drücke ⏭ zum Fortfahren.")
             return TASK_ATTACHMENTS
         atts.append(file_id)
         await update.message.reply_text(
-            f"✅ Allegato {len(atts)}/10 ricevuto. Invia altri o premi ⏭.",
+            f"✅ Anhang {len(atts)}/10 empfangen. Weitere senden oder ⏭ drücken.",
             reply_markup=skip_attachments_kb(),
         )
     else:
         await update.message.reply_text(
-            "⚠️ Tipo di file non riconosciuto. Invia un documento, foto, video o audio.",
+            "⚠️ Unbekannter Dateityp. Sende ein Dokument, Foto, Video oder Audio.",
         )
     return TASK_ATTACHMENTS
 
 
 async def proceed_to_reward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
-        "💰 <b>Passo 4/4 — Compenso Lordo</b>\n\n"
-        "Inserisci il compenso in <b>USDT</b> che vuoi offrire.\n"
-        "⚠️ Il 90% andrà all'esecutore al completamento (10% commissione piattaforma).\n\n"
-        "Puoi pagare l'escrow con il tuo saldo USDT <b>oppure</b> con <b>Telegram Stars</b>.",
+        "💰 <b>Schritt 4/4 — Bruttovergütung</b>\n\n"
+        "Gib die Vergütung in <b>USDT</b> ein, die du anbieten möchtest.\n"
+        "⚠️ 90% gehen bei Abschluss an den Auftragnehmer (10% Plattformgebühr).\n\n"
+        "Du kannst den Treuhandbetrag mit deinem USDT-Guthaben <b>oder</b> mit <b>Telegram Stars</b> bezahlen.",
         parse_mode="HTML",
         reply_markup=CANCEL_KB,
     )
@@ -175,13 +175,13 @@ async def proceed_to_reward(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def task_reward_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Annulla":
+    if update.message.text == "❌ Abbrechen":
         return await cancel_wizard(update, context)
 
     gross = validate_reward(update.message.text)
     if gross is None:
         await update.message.reply_text(
-            "⚠️ Importo non valido. Inserisci un numero positivo (es. <code>15.00</code>):",
+            "⚠️ Ungültiger Betrag. Gib eine positive Zahl ein (z.B. <code>15.00</code>):",
             parse_mode="HTML",
             reply_markup=CANCEL_KB,
         )
@@ -191,11 +191,10 @@ async def task_reward_received(update: Update, context: ContextTypes.DEFAULT_TYP
     stars_needed = calc_stars_for_usdt(gross, STAR_TO_USDT_RATE)
     ud = context.user_data
 
-    # Store all task data in user_data for the payment step
     context.user_data["pending_task"] = {
         "title": ud.get("title", ""),
-        "category": ud.get("category", "🌐 Generale"),
-        "deadline": ud.get("deadline", "N/D"),
+        "category": ud.get("category", "🌐 Allgemein"),
+        "deadline": ud.get("deadline", "k.A."),
         "attachments": json.dumps(ud.get("attachments", [])),
         "gross": gross,
         "net": net,
@@ -205,12 +204,12 @@ async def task_reward_received(update: Update, context: ContextTypes.DEFAULT_TYP
     bal = user["balance_usdt"] if user else 0.0
 
     await update.message.reply_text(
-        f"💳 <b>Metodo di pagamento escrow</b>\n\n"
-        f"Compenso lordo: <b>{gross:.2f} USDT</b>\n"
-        f"Netto esecutore: <b>{net:.2f} USDT</b>\n\n"
-        f"💵 Il tuo saldo USDT: <b>{bal:.2f}</b>\n"
-        f"⭐ Equivalente Stars: <b>{stars_needed} Stars</b>\n\n"
-        "Scegli come vuoi pagare:",
+        f"💳 <b>Treuhand-Zahlungsmethode</b>\n\n"
+        f"Bruttovergütung: <b>{gross:.2f} USDT</b>\n"
+        f"Netto Auftragnehmer: <b>{net:.2f} USDT</b>\n\n"
+        f"💵 Dein USDT-Guthaben: <b>{bal:.2f}</b>\n"
+        f"⭐ Stars-Äquivalent: <b>{stars_needed} Stars</b>\n\n"
+        "Wähle die Zahlungsmethode:",
         parse_mode="HTML",
         reply_markup=task_payment_kb(),
     )
@@ -218,7 +217,7 @@ async def task_reward_received(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 # ──────────────────────────────────────────────
-# Payment method callbacks (outside ConversationHandler)
+# Zahlungs-Callbacks (außerhalb ConversationHandler)
 # ──────────────────────────────────────────────
 
 async def task_pay_usdt_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -230,7 +229,7 @@ async def task_pay_usdt_callback(update: Update, context: ContextTypes.DEFAULT_T
     pending = context.user_data.get("pending_task")
     if not pending:
         await query.message.reply_text(
-            "❌ Sessione scaduta. Ricrea l'incarico.", reply_markup=MAIN_MENU
+            "❌ Sitzung abgelaufen. Bitte Auftrag neu erstellen.", reply_markup=MAIN_MENU
         )
         return
 
@@ -241,10 +240,10 @@ async def task_pay_usdt_callback(update: Update, context: ContextTypes.DEFAULT_T
     if not user or bal < gross:
         stars_needed = calc_stars_for_usdt(gross, STAR_TO_USDT_RATE)
         await query.message.reply_text(
-            f"❌ Saldo insufficiente. Hai <b>{bal:.2f} USDT</b>, "
-            f"ma l'incarico richiede <b>{gross:.2f} USDT</b>.\n\n"
-            f"Puoi ricaricare con 💰 Portafoglio oppure pagare con "
-            f"<b>{stars_needed} Telegram Stars</b>:",
+            f"❌ Unzureichendes Guthaben. Du hast <b>{bal:.2f} USDT</b>, "
+            f"der Auftrag erfordert jedoch <b>{gross:.2f} USDT</b>.\n\n"
+            f"Du kannst über 💰 Wallet aufladen oder mit "
+            f"<b>{stars_needed} Telegram Stars</b> zahlen:",
             parse_mode="HTML",
             reply_markup=task_payment_kb(),
         )
@@ -252,7 +251,7 @@ async def task_pay_usdt_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     ok = await db.freeze_funds(user_id, gross)
     if not ok:
-        await query.message.reply_text("❌ Errore nel bloccare i fondi. Riprova.", reply_markup=MAIN_MENU)
+        await query.message.reply_text("❌ Fehler beim Einfrieren der Mittel. Bitte erneut versuchen.", reply_markup=MAIN_MENU)
         return
 
     task_id = await _insert_task(user_id, pending)
@@ -260,9 +259,9 @@ async def task_pay_usdt_callback(update: Update, context: ContextTypes.DEFAULT_T
     await _post_to_channel(update.get_bot(), task_id, pending)
 
     await query.message.reply_text(
-        f"✅ <b>Incarico pubblicato!</b>\n\n"
-        f"🆔 Task #{task_id} — {pending['title']}\n"
-        f"💰 Fondi bloccati in escrow: <b>{gross:.2f} USDT</b>",
+        f"✅ <b>Auftrag veröffentlicht!</b>\n\n"
+        f"🆔 Auftrag #{task_id} — {pending['title']}\n"
+        f"💰 Im Treuhand eingefroren: <b>{gross:.2f} USDT</b>",
         parse_mode="HTML",
         reply_markup=MAIN_MENU,
     )
@@ -277,7 +276,7 @@ async def task_pay_stars_callback(update: Update, context: ContextTypes.DEFAULT_
     pending = context.user_data.get("pending_task")
     if not pending:
         await query.message.reply_text(
-            "❌ Sessione scaduta. Ricrea l'incarico.", reply_markup=MAIN_MENU
+            "❌ Sitzung abgelaufen. Bitte Auftrag neu erstellen.", reply_markup=MAIN_MENU
         )
         return
 
@@ -287,20 +286,20 @@ async def task_pay_stars_callback(update: Update, context: ContextTypes.DEFAULT_
 
     await context.bot.send_invoice(
         chat_id=user_id,
-        title=f"Escrow: {title_short}",
+        title=f"Treuhand: {title_short}",
         description=(
-            f"Pubblica incarico su Fai un Salto\n"
-            f"Importo escrow: {gross:.2f} USDT"
+            f"Auftrag auf Fai un Salto veröffentlichen\n"
+            f"Treuhandbetrag: {gross:.2f} USDT"
         ),
         payload=f"task_stars_{user_id}",
         currency="XTR",
-        prices=[LabeledPrice(label="Stars per escrow", amount=stars_needed)],
+        prices=[LabeledPrice(label="Stars für Treuhand", amount=stars_needed)],
         provider_token="",
     )
 
 
 # ──────────────────────────────────────────────
-# Shared task creation helpers
+# Hilfsfunktionen
 # ──────────────────────────────────────────────
 
 async def _insert_task(client_id: int, pending: dict) -> int:
@@ -335,14 +334,14 @@ async def _post_to_channel(bot, task_id: int, pending: dict) -> None:
     gross = pending["gross"]
     net = pending["net"]
     title = pending["title"]
-    category = pending.get("category", "🌐 Generale")
-    deadline = pending.get("deadline", "N/D")
+    category = pending.get("category", "🌐 Allgemein")
+    deadline = pending.get("deadline", "k.A.")
 
     channel_text = (
-        f"📋 <b>{title}</b> #PostProtetto\n\n"
+        f"📋 <b>{title}</b> #Auftrag\n\n"
         f"🏷 {category} | 📅 {deadline}\n"
-        f"💰 Compenso: <b>{gross:.2f} USDT</b> (netto: {net:.2f})\n\n"
-        f"🆔 Task #{task_id}"
+        f"💰 Vergütung: <b>{gross:.2f} USDT</b> (netto: {net:.2f})\n\n"
+        f"🆔 Auftrag #{task_id}"
     )
     try:
         msg = await bot.send_message(
@@ -358,21 +357,21 @@ async def _post_to_channel(bot, task_id: int, pending: dict) -> None:
             )
             await conn.commit()
     except Exception as e:
-        logger.error("Errore pubblicazione canale: %s", e)
+        logger.error("Fehler beim Veröffentlichen im Kanal: %s", e)
 
 
 # ──────────────────────────────────────────────
-# Cancel wizard
+# Assistent abbrechen
 # ──────────────────────────────────────────────
 
 async def cancel_wizard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
-    await update.message.reply_text("❌ Operazione annullata.", reply_markup=MAIN_MENU)
+    await update.message.reply_text("❌ Vorgang abgebrochen.", reply_markup=MAIN_MENU)
     return ConversationHandler.END
 
 
 # ──────────────────────────────────────────────
-# My tasks (inline callback)
+# Meine Aufträge (Inline-Callback)
 # ──────────────────────────────────────────────
 
 async def my_tasks_client_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -381,7 +380,7 @@ async def my_tasks_client_callback(update: Update, context: ContextTypes.DEFAULT
     user_id = update.effective_user.id
     tasks = await db.get_user_tasks_as_client(user_id)
     if not tasks:
-        await query.message.reply_text("📋 Nessun incarico pubblicato.")
+        await query.message.reply_text("📋 Noch keine Aufträge veröffentlicht.")
         return
     from utils import format_task_summary
     for t in tasks[:10]:

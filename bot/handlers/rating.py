@@ -15,7 +15,7 @@ import database as db
 
 logger = logging.getLogger(__name__)
 
-STAR_LABELS = {1: "😞 Pessimo", 2: "😐 Scarso", 3: "🙂 Sufficiente", 4: "😊 Buono", 5: "🌟 Eccellente"}
+STAR_LABELS = {1: "😞 Sehr schlecht", 2: "😐 Schlecht", 3: "🙂 Ausreichend", 4: "😊 Gut", 5: "🌟 Ausgezeichnet"}
 
 
 async def rate_executor_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -25,28 +25,27 @@ async def rate_executor_callback(update: Update, context: ContextTypes.DEFAULT_T
     user_id = update.effective_user.id
 
     parts = query.data.split("_")
-    # rate_exec_{task_id}_{stars}
     task_id = int(parts[2])
     stars = int(parts[3])
 
     task = await db.get_task(task_id)
     if not task:
-        await query.message.reply_text("❌ Task non trovato.")
+        await query.message.reply_text("❌ Auftrag nicht gefunden.")
         return
 
     if task["client_id"] != user_id:
-        await query.answer("❌ Solo il committente può valutare l'esecutore.", show_alert=True)
+        await query.answer("❌ Nur der Auftraggeber kann den Auftragnehmer bewerten.", show_alert=True)
         return
 
     if not task.get("executor_id"):
-        await query.message.reply_text("❌ Nessun esecutore da valutare.")
+        await query.message.reply_text("❌ Kein Auftragnehmer zu bewerten.")
         return
 
     await db.update_rating(task["executor_id"], "executor", stars)
     label = STAR_LABELS.get(stars, "")
 
     await query.message.edit_text(
-        f"⭐ Hai valutato l'esecutore con <b>{'⭐' * stars}</b> — {label}\nGrazie per il tuo feedback!",
+        f"⭐ Du hast den Auftragnehmer mit <b>{'⭐' * stars}</b> bewertet — {label}\nDanke für dein Feedback!",
         parse_mode="HTML",
     )
 
@@ -58,24 +57,23 @@ async def rate_client_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
 
     parts = query.data.split("_")
-    # rate_client_{task_id}_{stars}
     task_id = int(parts[2])
     stars = int(parts[3])
 
     task = await db.get_task(task_id)
     if not task:
-        await query.message.reply_text("❌ Task non trovato.")
+        await query.message.reply_text("❌ Auftrag nicht gefunden.")
         return
 
     if task["executor_id"] != user_id:
-        await query.answer("❌ Solo l'esecutore può valutare il committente.", show_alert=True)
+        await query.answer("❌ Nur der Auftragnehmer kann den Auftraggeber bewerten.", show_alert=True)
         return
 
     await db.update_rating(task["client_id"], "client", stars)
     label = STAR_LABELS.get(stars, "")
 
     await query.message.edit_text(
-        f"⭐ Hai valutato il committente con <b>{'⭐' * stars}</b> — {label}\nGrazie per il tuo feedback!",
+        f"⭐ Du hast den Auftraggeber mit <b>{'⭐' * stars}</b> bewertet — {label}\nDanke für dein Feedback!",
         parse_mode="HTML",
     )
 
@@ -87,19 +85,19 @@ async def prompt_ratings(bot, task_id: int, client_id: int, executor_id: int) ->
     try:
         await bot.send_message(
             chat_id=client_id,
-            text="⭐ <b>Com'è andato il deal?</b>\nValuta l'esecutore:",
+            text="⭐ <b>Wie lief der Deal?</b>\nBewerte den Auftragnehmer:",
             parse_mode="HTML",
             reply_markup=rating_kb(task_id, "exec"),
         )
     except Exception as e:
-        logger.warning("Impossibile inviare rating prompt al committente: %s", e)
+        logger.warning("Bewertungsaufforderung an Auftraggeber konnte nicht gesendet werden: %s", e)
 
     try:
         await bot.send_message(
             chat_id=executor_id,
-            text="⭐ <b>Com'è andato il deal?</b>\nValuta il committente:",
+            text="⭐ <b>Wie lief der Deal?</b>\nBewerte den Auftraggeber:",
             parse_mode="HTML",
             reply_markup=rating_kb(task_id, "client"),
         )
     except Exception as e:
-        logger.warning("Impossibile inviare rating prompt all'esecutore: %s", e)
+        logger.warning("Bewertungsaufforderung an Auftragnehmer konnte nicht gesendet werden: %s", e)

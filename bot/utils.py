@@ -7,11 +7,11 @@ logger = logging.getLogger(__name__)
 BLOCKED_EXTENSIONS = {".exe", ".sh", ".bat", ".cmd", ".ps1", ".vbs", ".msi", ".jar"}
 
 STATUS_LABELS = {
-    "open": "🟢 Aperto",
-    "in_progress": "🟡 In corso",
-    "completed": "✅ Completato",
-    "dispute": "🔴 Controversia",
-    "cancelled": "❌ Annullato",
+    "open": "🟢 Offen",
+    "in_progress": "🟡 In Bearbeitung",
+    "completed": "✅ Abgeschlossen",
+    "dispute": "🔴 Streitfall",
+    "cancelled": "❌ Storniert",
 }
 
 
@@ -57,12 +57,12 @@ def format_task_summary(task: dict) -> str:
     status_label = STATUS_LABELS.get(task.get("status", ""), task.get("status", ""))
     lines = [
         f"📋 <b>{task['title']}</b>",
-        f"🏷 Categoria: {task.get('category', 'Generale')}",
-        f"📅 Scadenza: {task.get('deadline', 'N/D')}",
-        f"💰 Compenso lordo: <b>{task['reward_gross']:.2f} USDT</b>",
-        f"💵 Netto esecutore: <b>{task['reward_net']:.2f} USDT</b>",
-        f"🔖 Stato: {status_label}",
-        f"🆔 ID task: <code>{task['task_id']}</code>",
+        f"🏷 Kategorie: {task.get('category', 'Allgemein')}",
+        f"📅 Frist: {task.get('deadline', 'k.A.')}",
+        f"💰 Bruttovergütung: <b>{task['reward_gross']:.2f} USDT</b>",
+        f"💵 Netto Auftragnehmer: <b>{task['reward_net']:.2f} USDT</b>",
+        f"🔖 Status: {status_label}",
+        f"🆔 Auftrags-ID: <code>{task['task_id']}</code>",
     ]
     if task.get("description"):
         lines.insert(1, f"📝 {task['description']}")
@@ -71,4 +71,4 @@ def format_task_summary(task: dict) -> str:
 
 def strip_username_mentions(text: str) -> str:
     """Remove @username mentions to protect privacy."""
-    return re.sub(r"@\w+", "[utente]", text)
+    return re.sub(r"@\w+", "[Nutzer]", text)

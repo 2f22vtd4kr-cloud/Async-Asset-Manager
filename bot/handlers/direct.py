@@ -2,7 +2,7 @@
 Direct Deal flow — private invite-only task between a specific client and executor.
 
 Flow:
-  1. Client presses "🤝 Nuovo Affare Diretto"
+  1. Client presses "🤝 Neues Direktgeschäft"
   2. Wizard collects: target @username, title, category, deadline, attachments, reward
   3. Funds are frozen; task is created as is_direct=1
   4. Client receives a unique deep-link to forward to the executor
@@ -46,16 +46,16 @@ TOKEN_LEN = 12  # hex chars — short enough for callback_data safety
 
 
 # ─────────────────────────────────────────────
-# Entry point
+# Einstiegspunkt
 # ─────────────────────────────────────────────
 
 async def direct_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
     context.user_data["attachments"] = []
     await update.message.reply_text(
-        "🤝 <b>Nuovo Affare Diretto</b>\n\n"
-        "Inserisci lo <b>username Telegram</b> dell'esecutore con cui vuoi collaborare.\n"
-        "Es: <code>@mario_rossi</code>",
+        "🤝 <b>Neues Direktgeschäft</b>\n\n"
+        "Gib den <b>Telegram-Benutzernamen</b> des Auftragnehmers ein, mit dem du zusammenarbeiten möchtest.\n"
+        "Bsp: <code>@max_mustermann</code>",
         parse_mode="HTML",
         reply_markup=CANCEL_KB,
     )
@@ -63,11 +63,11 @@ async def direct_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 
 # ─────────────────────────────────────────────
-# Step 1 — Target executor username
+# Schritt 1 — Ziel-Auftragnehmer-Username
 # ─────────────────────────────────────────────
 
 async def direct_target_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Annulla":
+    if update.message.text == "❌ Abbrechen":
         return await direct_cancel(update, context)
 
     raw = update.message.text.strip()
@@ -75,7 +75,7 @@ async def direct_target_received(update: Update, context: ContextTypes.DEFAULT_T
 
     if len(username) < 2 or not username[1:].replace("_", "").isalnum():
         await update.message.reply_text(
-            "⚠️ Username non valido. Inserisci un username Telegram valido (es. <code>@mario_rossi</code>):",
+            "⚠️ Ungültiger Benutzername. Gib einen gültigen Telegram-Benutzernamen ein (z.B. <code>@max_mustermann</code>):",
             parse_mode="HTML",
             reply_markup=CANCEL_KB,
         )
@@ -83,9 +83,9 @@ async def direct_target_received(update: Update, context: ContextTypes.DEFAULT_T
 
     context.user_data["direct_target"] = username
     await update.message.reply_text(
-        f"👤 Esecutore selezionato: <b>{username}</b>\n\n"
-        "📝 <b>Passo 1/5 — Titolo dell'incarico</b>\n\n"
-        "Scrivi un titolo chiaro e conciso:",
+        f"👤 Ausgewählter Auftragnehmer: <b>{username}</b>\n\n"
+        "📝 <b>Schritt 1/5 — Aufragstitel</b>\n\n"
+        "Schreibe einen klaren und prägnanten Titel:",
         parse_mode="HTML",
         reply_markup=CANCEL_KB,
     )
@@ -93,24 +93,24 @@ async def direct_target_received(update: Update, context: ContextTypes.DEFAULT_T
 
 
 # ─────────────────────────────────────────────
-# Step 2 — Title
+# Schritt 2 — Titel
 # ─────────────────────────────────────────────
 
 async def direct_title_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Annulla":
+    if update.message.text == "❌ Abbrechen":
         return await direct_cancel(update, context)
 
     title = update.message.text.strip()
     if len(title) < 5 or len(title) > 200:
         await update.message.reply_text(
-            "⚠️ Il titolo deve essere tra 5 e 200 caratteri. Riprova:",
+            "⚠️ Der Titel muss zwischen 5 und 200 Zeichen lang sein. Nochmal versuchen:",
             reply_markup=CANCEL_KB,
         )
         return DIRECT_TITLE
 
     context.user_data["title"] = title
     await update.message.reply_text(
-        "🏷 <b>Passo 2/5 — Categoria</b>\n\nScegli la categoria dell'incarico:",
+        "🏷 <b>Schritt 2/5 — Kategorie</b>\n\nWähle die Kategorie des Auftrags:",
         parse_mode="HTML",
         reply_markup=CATEGORY_KB,
     )
@@ -118,17 +118,17 @@ async def direct_title_received(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 # ─────────────────────────────────────────────
-# Step 3 — Category + Deadline
+# Schritt 3 — Kategorie + Frist
 # ─────────────────────────────────────────────
 
 async def direct_category_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Annulla":
+    if update.message.text == "❌ Abbrechen":
         return await direct_cancel(update, context)
 
     context.user_data["category"] = update.message.text
     await update.message.reply_text(
-        "📅 <b>Passo 3/5 — Scadenza</b>\n\n"
-        "Inserisci la scadenza (es. <i>20 luglio 2025</i> o <i>entro 5 giorni</i>):",
+        "📅 <b>Schritt 3/5 — Frist</b>\n\n"
+        "Gib die Frist ein (z.B. <i>20. Juli 2025</i> oder <i>innerhalb von 5 Tagen</i>):",
         parse_mode="HTML",
         reply_markup=CANCEL_KB,
     )
@@ -136,14 +136,14 @@ async def direct_category_received(update: Update, context: ContextTypes.DEFAULT
 
 
 async def direct_deadline_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Annulla":
+    if update.message.text == "❌ Abbrechen":
         return await direct_cancel(update, context)
 
     context.user_data["deadline"] = update.message.text.strip()
     await update.message.reply_text(
-        "📎 <b>Passo 4/5 — Allegati</b>\n\n"
-        "Invia file, immagini o documenti (fino a 50 MB ciascuno).\n"
-        "Quando hai finito premi <b>⏭ Salta allegati</b>.",
+        "📎 <b>Schritt 4/5 — Anhänge</b>\n\n"
+        "Sende Dateien, Bilder oder Dokumente (bis zu 50 MB pro Datei).\n"
+        "Wenn du fertig bist, drücke <b>⏭ Anhänge überspringen</b>.",
         parse_mode="HTML",
         reply_markup=skip_attachments_kb(),
     )
@@ -151,14 +151,14 @@ async def direct_deadline_received(update: Update, context: ContextTypes.DEFAULT
 
 
 # ─────────────────────────────────────────────
-# Step 4 — Attachments
+# Schritt 4 — Anhänge
 # ─────────────────────────────────────────────
 
 async def direct_attachment_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Annulla":
+    if update.message.text == "❌ Abbrechen":
         return await direct_cancel(update, context)
 
-    if update.message.text == "⏭ Salta allegati":
+    if update.message.text == "⏭ Anhänge überspringen":
         return await _proceed_to_direct_reward(update, context)
 
     file_id = None
@@ -169,7 +169,7 @@ async def direct_attachment_received(update: Update, context: ContextTypes.DEFAU
         file_name = doc.file_name or ""
         if is_blocked_file(file_name):
             await update.message.reply_text(
-                f"🚫 File <code>{file_name}</code> non consentito.",
+                f"🚫 Datei <code>{file_name}</code> nicht erlaubt.",
                 parse_mode="HTML",
             )
             return DIRECT_ATTACHMENTS
@@ -184,24 +184,24 @@ async def direct_attachment_received(update: Update, context: ContextTypes.DEFAU
     if file_id:
         atts = context.user_data.setdefault("attachments", [])
         if len(atts) >= 10:
-            await update.message.reply_text("⚠️ Massimo 10 allegati. Premi ⏭ per continuare.")
+            await update.message.reply_text("⚠️ Maximal 10 Anhänge. Drücke ⏭ zum Fortfahren.")
             return DIRECT_ATTACHMENTS
         atts.append(file_id)
         await update.message.reply_text(
-            f"✅ Allegato {len(atts)}/10 ricevuto. Invia altri o premi ⏭.",
+            f"✅ Anhang {len(atts)}/10 empfangen. Weitere senden oder ⏭ drücken.",
             reply_markup=skip_attachments_kb(),
         )
     else:
-        await update.message.reply_text("⚠️ Tipo di file non riconosciuto.")
+        await update.message.reply_text("⚠️ Unbekannter Dateityp.")
     return DIRECT_ATTACHMENTS
 
 
 async def _proceed_to_direct_reward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
-        "💰 <b>Passo 5/5 — Compenso Lordo</b>\n\n"
-        "Inserisci il compenso in <b>USDT</b> che vuoi offrire.\n"
-        "⚠️ Il 10% viene trattenuto come commissione piattaforma.\n"
-        "Il 90% andrà all'esecutore al completamento.",
+        "💰 <b>Schritt 5/5 — Bruttovergütung</b>\n\n"
+        "Gib die Vergütung in <b>USDT</b> ein, die du anbieten möchtest.\n"
+        "⚠️ 10% werden als Plattformgebühr einbehalten.\n"
+        "90% gehen bei Abschluss an den Auftragnehmer.",
         parse_mode="HTML",
         reply_markup=CANCEL_KB,
     )
@@ -209,17 +209,17 @@ async def _proceed_to_direct_reward(update: Update, context: ContextTypes.DEFAUL
 
 
 # ─────────────────────────────────────────────
-# Step 5 — Reward → create task & send deep link
+# Schritt 5 — Vergütung → Auftrag erstellen & Deep-Link senden
 # ─────────────────────────────────────────────
 
 async def direct_reward_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Annulla":
+    if update.message.text == "❌ Abbrechen":
         return await direct_cancel(update, context)
 
     gross = validate_reward(update.message.text)
     if gross is None:
         await update.message.reply_text(
-            "⚠️ Importo non valido. Inserisci un numero positivo (es. <code>20.00</code>):",
+            "⚠️ Ungültiger Betrag. Gib eine positive Zahl ein (z.B. <code>20.00</code>):",
             parse_mode="HTML",
             reply_markup=CANCEL_KB,
         )
@@ -230,9 +230,9 @@ async def direct_reward_received(update: Update, context: ContextTypes.DEFAULT_T
     if not user or user["balance_usdt"] < gross:
         bal = user["balance_usdt"] if user else 0.0
         await update.message.reply_text(
-            f"❌ Saldo insufficiente. Hai <b>{bal:.2f} USDT</b>, "
-            f"ma l'incarico richiede <b>{gross:.2f} USDT</b>.\n"
-            "Ricarica il portafoglio con 💰 Portafoglio.",
+            f"❌ Unzureichendes Guthaben. Du hast <b>{bal:.2f} USDT</b>, "
+            f"der Auftrag erfordert jedoch <b>{gross:.2f} USDT</b>.\n"
+            "Lade dein Wallet über 💰 Wallet auf.",
             parse_mode="HTML",
             reply_markup=MAIN_MENU,
         )
@@ -241,8 +241,8 @@ async def direct_reward_received(update: Update, context: ContextTypes.DEFAULT_T
     net = calc_net_reward(gross, PLATFORM_FEE_RATE)
     ud = context.user_data
     title = ud["title"]
-    category = ud.get("category", "🌐 Generale")
-    deadline = ud.get("deadline", "N/D")
+    category = ud.get("category", "🌐 Allgemein")
+    deadline = ud.get("deadline", "k.A.")
     attachments = json.dumps(ud.get("attachments", []))
     target_username = ud["direct_target"]
 
@@ -253,7 +253,7 @@ async def direct_reward_received(update: Update, context: ContextTypes.DEFAULT_T
     # Atomically freeze funds
     ok = await freeze_funds(user_id, gross)
     if not ok:
-        await update.message.reply_text("❌ Errore nel bloccare i fondi. Riprova.", reply_markup=MAIN_MENU)
+        await update.message.reply_text("❌ Fehler beim Einfrieren der Mittel. Bitte erneut versuchen.", reply_markup=MAIN_MENU)
         return ConversationHandler.END
 
     # Insert task as direct
@@ -278,15 +278,15 @@ async def direct_reward_received(update: Update, context: ContextTypes.DEFAULT_T
 
     from telegram import InlineKeyboardMarkup, InlineKeyboardButton
     share_kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔗 Apri link invito", url=deep_link)]
+        [InlineKeyboardButton("🔗 Einladungslink öffnen", url=deep_link)]
     ])
 
     await update.message.reply_text(
-        f"✅ <b>Affare diretto creato!</b>\n\n"
-        f"🆔 Task #{task_id} — {title}\n"
-        f"👤 Per: <b>{target_username}</b>\n"
-        f"💰 Escrow bloccato: <b>{gross:.2f} USDT</b>\n\n"
-        f"📩 Invia questo link a {target_username} per far accettare l'incarico:\n"
+        f"✅ <b>Direktgeschäft erstellt!</b>\n\n"
+        f"🆔 Auftrag #{task_id} — {title}\n"
+        f"👤 Für: <b>{target_username}</b>\n"
+        f"💰 Treuhand eingefroren: <b>{gross:.2f} USDT</b>\n\n"
+        f"📩 Schicke diesen Link an {target_username}, damit er/sie den Auftrag annehmen kann:\n"
         f"<code>{deep_link}</code>",
         parse_mode="HTML",
         reply_markup=share_kb,
@@ -296,7 +296,7 @@ async def direct_reward_received(update: Update, context: ContextTypes.DEFAULT_T
 
 
 # ─────────────────────────────────────────────
-# Deep-link entry: /start direct_<TOKEN>
+# Deep-Link-Einstieg: /start direct_<TOKEN>
 # ─────────────────────────────────────────────
 
 async def handle_direct_deeplink(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -304,7 +304,6 @@ async def handle_direct_deeplink(update: Update, context: ContextTypes.DEFAULT_T
     token = context.args[0][len("direct_"):]  # strip "direct_" prefix
     user_id = update.effective_user.id
 
-    # Look up the task by token
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         async with conn.execute(
@@ -315,7 +314,7 @@ async def handle_direct_deeplink(update: Update, context: ContextTypes.DEFAULT_T
 
     if not task:
         await update.message.reply_text(
-            "❌ Link non valido o incarico non più disponibile.",
+            "❌ Ungültiger Link oder Auftrag nicht mehr verfügbar.",
             reply_markup=MAIN_MENU,
         )
         return
@@ -324,27 +323,26 @@ async def handle_direct_deeplink(update: Update, context: ContextTypes.DEFAULT_T
 
     if task["client_id"] == user_id:
         await update.message.reply_text(
-            "⚠️ Non puoi accettare il tuo stesso incarico.",
+            "⚠️ Du kannst deinen eigenen Auftrag nicht annehmen.",
             reply_markup=MAIN_MENU,
         )
         return
 
-    # Parse username from identity
     target_username = task["target_executor_identity"].split("|")[0]
 
     await update.message.reply_text(
-        f"🤝 <b>Proposta di Affare Diretto</b>\n\n"
+        f"🤝 <b>Direktgeschäft-Angebot</b>\n\n"
         f"📋 <b>{task['title']}</b>\n"
-        f"🏷 {task.get('category', 'Generale')} | 📅 {task.get('deadline', 'N/D')}\n"
-        f"💰 Compenso netto per te: <b>{task['reward_net']:.2f} USDT</b>\n\n"
-        f"Accetti questo incarico?",
+        f"🏷 {task.get('category', 'Allgemein')} | 📅 {task.get('deadline', 'k.A.')}\n"
+        f"💰 Nettovergütung für dich: <b>{task['reward_net']:.2f} USDT</b>\n\n"
+        f"Nimmst du diesen Auftrag an?",
         parse_mode="HTML",
         reply_markup=direct_deal_offer_kb(task["task_id"], token),
     )
 
 
 # ─────────────────────────────────────────────
-# Accept / Decline callbacks
+# Annehmen / Ablehnen Callbacks
 # ─────────────────────────────────────────────
 
 async def direct_accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -353,7 +351,6 @@ async def direct_accept_callback(update: Update, context: ContextTypes.DEFAULT_T
     user_id = update.effective_user.id
 
     parts = query.data.split("_")
-    # pattern: direct_accept_{task_id}_{token}
     task_id = int(parts[2])
     token = parts[3]
 
@@ -366,13 +363,13 @@ async def direct_accept_callback(update: Update, context: ContextTypes.DEFAULT_T
             task = await cursor.fetchone()
 
     if not task:
-        await query.answer("❌ Incarico non più disponibile.", show_alert=True)
+        await query.answer("❌ Auftrag nicht mehr verfügbar.", show_alert=True)
         return
 
     task = dict(task)
 
     if task["client_id"] == user_id:
-        await query.answer("⚠️ Non puoi accettare il tuo stesso incarico.", show_alert=True)
+        await query.answer("⚠️ Du kannst deinen eigenen Auftrag nicht annehmen.", show_alert=True)
         return
 
     # Atomically claim the task
@@ -384,7 +381,7 @@ async def direct_accept_callback(update: Update, context: ContextTypes.DEFAULT_T
             row = await cursor.fetchone()
         if not row or row[0] != "open":
             await conn.execute("ROLLBACK")
-            await query.answer("❌ Incarico già assegnato.", show_alert=True)
+            await query.answer("❌ Auftrag bereits vergeben.", show_alert=True)
             return
         await conn.execute(
             "UPDATE tasks SET status='in_progress', executor_id=?, claimed_at=CURRENT_TIMESTAMP WHERE task_id=?",
@@ -403,22 +400,22 @@ async def direct_accept_callback(update: Update, context: ContextTypes.DEFAULT_T
         await bot.send_message(
             chat_id=task["client_id"],
             text=(
-                f"🎉 <b>Affare Diretto accettato!</b>\n\n"
-                f"Task #{task_id} — {task['title']}\n"
-                f"L'esecutore ha accettato la tua proposta. La chat è ora attiva.\n"
-                "Scrivi qui per comunicare in modo anonimo."
+                f"🎉 <b>Direktgeschäft angenommen!</b>\n\n"
+                f"Auftrag #{task_id} — {task['title']}\n"
+                f"Der Auftragnehmer hat dein Angebot angenommen. Der Chat ist jetzt aktiv.\n"
+                "Schreibe hier, um anonym zu kommunizieren."
             ),
             parse_mode="HTML",
             reply_markup=client_room_kb(task_id),
         )
     except Exception as e:
-        logger.error("Impossibile notificare committente diretto: %s", e)
+        logger.error("Auftraggeber des Direktgeschäfts konnte nicht benachrichtigt werden: %s", e)
 
     await query.message.reply_text(
-        f"✅ <b>Incarico accettato!</b>\n\n"
-        f"Task #{task_id} — {task['title']}\n"
-        f"💰 Compenso netto: <b>{task['reward_net']:.2f} USDT</b>\n\n"
-        "Scrivi qui per comunicare con il committente in modo anonimo.",
+        f"✅ <b>Auftrag angenommen!</b>\n\n"
+        f"Auftrag #{task_id} — {task['title']}\n"
+        f"💰 Nettovergütung: <b>{task['reward_net']:.2f} USDT</b>\n\n"
+        "Schreibe hier, um anonym mit dem Auftraggeber zu kommunizieren.",
         parse_mode="HTML",
         reply_markup=executor_room_kb(task_id),
     )
@@ -440,7 +437,7 @@ async def direct_decline_callback(update: Update, context: ContextTypes.DEFAULT_
             task = await cursor.fetchone()
 
     if not task:
-        await query.answer("❌ Incarico già gestito.", show_alert=True)
+        await query.answer("❌ Auftrag bereits bearbeitet.", show_alert=True)
         return
 
     task = dict(task)
@@ -453,30 +450,30 @@ async def direct_decline_callback(update: Update, context: ContextTypes.DEFAULT_
         await context.bot.send_message(
             chat_id=task["client_id"],
             text=(
-                f"❌ <b>Affare Diretto rifiutato</b>\n\n"
-                f"Task #{task_id} — {task['title']}\n"
-                f"L'esecutore ha rifiutato la proposta.\n"
-                f"💰 <b>{task['reward_gross']:.2f} USDT</b> restituiti al tuo saldo."
+                f"❌ <b>Direktgeschäft abgelehnt</b>\n\n"
+                f"Auftrag #{task_id} — {task['title']}\n"
+                f"Der Auftragnehmer hat das Angebot abgelehnt.\n"
+                f"💰 <b>{task['reward_gross']:.2f} USDT</b> deinem Guthaben zurückgebucht."
             ),
             parse_mode="HTML",
             reply_markup=MAIN_MENU,
         )
     except Exception as e:
-        logger.error("Impossibile notificare committente del rifiuto: %s", e)
+        logger.error("Auftraggeber über Ablehnung konnte nicht benachrichtigt werden: %s", e)
 
     await query.message.reply_text(
-        f"Hai rifiutato l'incarico <b>{task['title']}</b>.\n"
-        "Puoi esplorare altri incarichi dal canale.",
+        f"Du hast den Auftrag <b>{task['title']}</b> abgelehnt.\n"
+        "Du kannst weitere Aufträge im Kanal erkunden.",
         parse_mode="HTML",
         reply_markup=MAIN_MENU,
     )
 
 
 # ─────────────────────────────────────────────
-# Cancel
+# Abbrechen
 # ─────────────────────────────────────────────
 
 async def direct_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
-    await update.message.reply_text("❌ Operazione annullata.", reply_markup=MAIN_MENU)
+    await update.message.reply_text("❌ Vorgang abgebrochen.", reply_markup=MAIN_MENU)
     return ConversationHandler.END

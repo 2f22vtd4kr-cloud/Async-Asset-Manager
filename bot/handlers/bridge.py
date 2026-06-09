@@ -33,20 +33,20 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     recipient_id = session["executor_id"] if is_client else session["client_id"]
-    sender_label = "📩 Messaggio dal Committente:" if is_client else "📩 Messaggio dall'Esecutore:"
+    sender_label = "📩 Nachricht vom Auftraggeber:" if is_client else "📩 Nachricht vom Auftragnehmer:"
 
     # Block dangerous file types
     if msg.document:
         file_name = msg.document.file_name or ""
         if is_blocked_file(file_name):
             await msg.reply_text(
-                f"🚫 File <code>{file_name}</code> bloccato per sicurezza.",
+                f"🚫 Datei <code>{file_name}</code> aus Sicherheitsgründen gesperrt.",
                 parse_mode="HTML",
             )
             return
         msg_type = "document"
         file_id = msg.document.file_id
-        preview = f"[Documento: {file_name}]"
+        preview = f"[Dokument: {file_name}]"
     elif msg.photo:
         msg_type = "photo"
         file_id = msg.photo[-1].file_id
@@ -62,7 +62,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     elif msg.voice:
         msg_type = "voice"
         file_id = msg.voice.file_id
-        preview = "[Messaggio vocale]"
+        preview = "[Sprachnachricht]"
     elif msg.sticker:
         msg_type = "sticker"
         file_id = msg.sticker.file_id
@@ -72,7 +72,7 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         file_id = None
         preview = strip_username_mentions(msg.text[:500])
     else:
-        await msg.reply_text("⚠️ Tipo di messaggio non supportato.")
+        await msg.reply_text("⚠️ Nachrichtentyp nicht unterstützt.")
         return
 
     # Log message
@@ -120,20 +120,20 @@ async def route_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # Re-send floating control panel after each message
         if is_client:
             await msg.reply_text(
-                "🎛 <b>Pannello di controllo</b>",
+                "🎛 <b>Steuerfeld</b>",
                 parse_mode="HTML",
                 reply_markup=client_room_kb(task_id),
             )
         else:
             await msg.reply_text(
-                "🎛 <b>Pannello di controllo</b>",
+                "🎛 <b>Steuerfeld</b>",
                 parse_mode="HTML",
                 reply_markup=executor_room_kb(task_id),
             )
 
     except Exception as e:
-        logger.error("Errore inoltro messaggio: %s", e)
-        await msg.reply_text("⚠️ Errore nell'inoltro del messaggio. Riprova.")
+        logger.error("Fehler beim Weiterleiten der Nachricht: %s", e)
+        await msg.reply_text("⚠️ Fehler beim Weiterleiten der Nachricht. Bitte erneut versuchen.")
 
 
 async def complete_task_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -145,16 +145,16 @@ async def complete_task_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     task = await db.get_task(task_id)
     if not task or task["client_id"] != user_id:
-        await query.answer("❌ Operazione non consentita.", show_alert=True)
+        await query.answer("❌ Vorgang nicht erlaubt.", show_alert=True)
         return
 
     if task["status"] != "in_progress":
-        await query.answer("⚠️ Questo deal non è in corso.", show_alert=True)
+        await query.answer("⚠️ Dieser Deal ist nicht aktiv.", show_alert=True)
         return
 
     ok = await db.release_to_executor(task_id)
     if not ok:
-        await query.message.reply_text("❌ Errore nel rilascio dei fondi. Contatta il supporto.")
+        await query.message.reply_text("❌ Fehler bei der Freigabe der Mittel. Bitte Support kontaktieren.")
         return
 
     await db.close_deal_session(task_id, "closed")
@@ -162,9 +162,9 @@ async def complete_task_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     bot = context.bot
     await query.message.reply_text(
-        f"✅ <b>Completamento confermato!</b>\n\n"
-        f"Task #{task_id} — {task['title']}\n"
-        f"Il compenso è stato rilasciato all'esecutore.",
+        f"✅ <b>Abschluss bestätigt!</b>\n\n"
+        f"Auftrag #{task_id} — {task['title']}\n"
+        f"Die Vergütung wurde an den Auftragnehmer freigegeben.",
         parse_mode="HTML",
         reply_markup=MAIN_MENU,
     )
@@ -172,15 +172,15 @@ async def complete_task_callback(update: Update, context: ContextTypes.DEFAULT_T
         await bot.send_message(
             chat_id=task["executor_id"],
             text=(
-                f"🎉 <b>Incarico completato!</b>\n\n"
-                f"Task #{task_id} — {task['title']}\n"
-                f"💰 <b>{task['reward_net']:.2f} USDT</b> accreditati al tuo saldo."
+                f"🎉 <b>Auftrag abgeschlossen!</b>\n\n"
+                f"Auftrag #{task_id} — {task['title']}\n"
+                f"💰 <b>{task['reward_net']:.2f} USDT</b> wurden deinem Guthaben gutgeschrieben."
             ),
             parse_mode="HTML",
             reply_markup=MAIN_MENU,
         )
     except Exception as e:
-        logger.error("Impossibile notificare esecutore: %s", e)
+        logger.error("Auftragnehmer konnte nicht benachrichtigt werden: %s", e)
 
     # Prompt both parties to rate each other
     from handlers.rating import prompt_ratings

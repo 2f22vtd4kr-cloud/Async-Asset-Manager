@@ -9,10 +9,10 @@ import database as db
 logger = logging.getLogger(__name__)
 
 WELCOME_TEXT = (
-    "🐸 <b>Benvenuto su Fai un Salto!</b>\n\n"
-    "La piattaforma P2P per studenti universitari italiani.\n"
-    "Pubblica incarichi, trova collaboratori e gestisci i pagamenti in modo sicuro.\n\n"
-    "Seleziona un'opzione dal menu qui sotto:"
+    "🐸 <b>Willkommen bei Fai un Salto!</b>\n\n"
+    "Die P2P-Plattform für deutsche Studierende.\n"
+    "Veröffentliche Aufträge, finde Mitarbeiter und wickle Zahlungen sicher ab.\n\n"
+    "Wähle eine Option aus dem Menü unten:"
 )
 
 
@@ -24,12 +24,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def support(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        "ℹ️ <b>Supporto Fai un Salto</b>\n\n"
-        "Per assistenza contatta il nostro team:\n"
-        "• Disputa in corso? Usa il pulsante 🚨 nella chat del deal.\n"
-        "• Problemi tecnici? Scrivi a @FaiUnSaltoSupport\n"
-        "• Commissioni: 10% su ogni incarico completato.\n"
-        "• Conversione Stars → USDT: 1 Star = 0.02 USDT"
+        "ℹ️ <b>Support – Fai un Salto</b>\n\n"
+        "Für Hilfe kontaktiere unser Team:\n"
+        "• Streitfall? Nutze den 🚨-Button im Deal-Chat.\n"
+        "• Technische Probleme? Schreibe an @FaiUnSaltoSupport\n"
+        "• Gebühren: 10% auf jeden abgeschlossenen Auftrag.\n"
+        "• Umrechnung Stars → USDT: 1 Star = 0,02 USDT"
     )
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=MAIN_MENU)
 
@@ -46,30 +46,30 @@ async def my_chats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if not active:
         await update.message.reply_text(
-            "📂 <b>I Miei Chat Attivi</b>\n\nNessuna chat attiva al momento.",
+            "📂 <b>Meine aktiven Chats</b>\n\nDerzeit keine aktiven Chats.",
             parse_mode="HTML",
             reply_markup=MAIN_MENU,
         )
         return
 
     await update.message.reply_text(
-        f"📂 <b>I Miei Chat Attivi</b> ({len(active)} deal)\n\n"
-        "Scrivi un messaggio in qualsiasi chat attiva: verrà inoltrato automaticamente all'altra parte.",
+        f"📂 <b>Meine aktiven Chats</b> ({len(active)} Deals)\n\n"
+        "Schreibe in einen aktiven Chat: die Nachricht wird automatisch anonym weitergeleitet.",
         parse_mode="HTML",
         reply_markup=MAIN_MENU,
     )
     for t in active:
-        role = "Committente" if t["client_id"] == user_id else "Esecutore"
+        role = "Auftraggeber" if t["client_id"] == user_id else "Auftragnehmer"
         await update.message.reply_text(
             f"🔗 Deal <code>#{t['task_id']}</code> — {t['title']}\n"
-            f"Ruolo: {role} | Stato: {STATUS_LABELS.get(t['status'], t['status'])}",
+            f"Rolle: {role} | Status: {STATUS_LABELS.get(t['status'], t['status'])}",
             parse_mode="HTML",
         )
 
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "❓ Comando non riconosciuto. Usa il menu qui sotto.",
+        "❓ Unbekannter Befehl. Nutze das Menü unten.",
         reply_markup=MAIN_MENU,
     )
 
@@ -79,6 +79,6 @@ async def block_check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> boo
     user_id = update.effective_user.id
     user = await get_user(user_id)
     if user and user.get("is_blocked"):
-        await update.message.reply_text("🚫 Il tuo account è stato sospeso.")
+        await update.message.reply_text("🚫 Dein Konto wurde gesperrt.")
         return True
     return False
