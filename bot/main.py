@@ -3,7 +3,6 @@ import logging
 import sys
 import os
 
-# Ensure bot/ directory is on the path
 sys.path.insert(0, os.path.dirname(__file__))
 
 import aiohttp
@@ -19,11 +18,14 @@ from telegram.ext import (
 )
 
 from config import BOT_TOKEN, CRYPTOBOT_TOKEN
-from database import init_db, get_user, credit_balance, add_admin_fee, DB_PATH
+from database import init_db, get_user, credit_balance, DB_PATH
 from utils import setup_logging
-from states import TASK_TITLE, TASK_CATEGORY, TASK_DEADLINE, TASK_ATTACHMENTS, TASK_REWARD
+from states import (
+    TASK_TITLE, TASK_CATEGORY, TASK_DEADLINE, TASK_ATTACHMENTS, TASK_REWARD,
+    DIRECT_TARGET, DIRECT_TITLE, DIRECT_CATEGORY, DIRECT_DEADLINE,
+    DIRECT_ATTACHMENTS, DIRECT_REWARD,
+)
 
-# Handlers
 from handlers.common import start, support, my_chats, unknown_command
 from handlers.committente import (
     area_committente,
@@ -58,7 +60,19 @@ from handlers.admin import (
     admin_refund_client,
     admin_stats,
 )
-from handlers.miniapp import open_mini_app, web_app_data_handler
+from handlers.direct import (
+    direct_start,
+    direct_target_received,
+    direct_title_received,
+    direct_category_received,
+    direct_deadline_received,
+    direct_attachment_received,
+    direct_reward_received,
+    direct_cancel,
+    handle_direct_deeplink,
+    direct_accept_callback,
+    direct_decline_callback,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,15 +80,12 @@ CRYPTOBOT_API = "https://pay.crypt.bot/api"
 
 
 # ──────────────────────────────────────────────
-# CryptoBot invoice poller (background task)
+# CryptoBot invoice poller
 # ──────────────────────────────────────────────
 
 async def cryptobot_invoice_poller(app: Application) -> None:
-    """Poll CryptoBot getInvoices every 15 seconds and credit confirmed payments."""
-    import aiosqlite
     headers = {"Crypto-Pay-API-Token": CRYPTOBOT_TOKEN}
     processed_ids: set = set()
-
     logger.info("CryptoBot poller started.")
     while True:
         try:
@@ -98,7 +109,6 @@ async def cryptobot_invoice_poller(app: Application) -> None:
                     if not payload.startswith("topup_"):
                         continue
 
-                    # payload format: topup_{telegram_id}_{uuid}
                     parts = payload.split("_")
                     if len(parts) < 2:
                         continue
@@ -111,21 +121,17 @@ async def cryptobot_invoice_poller(app: Application) -> None:
                     if amount <= 0:
                         continue
 
-                    # Check if already credited (idempotency via processed_ids in-memory)
                     user = await get_user(telegram_id)
                     if not user:
                         continue
 
                     await credit_balance(telegram_id, amount)
-                    logger.info("CryptoBot topup: credited %.4f USDT to user %d", amount, telegram_id)
+                    logger.info("CryptoBot topup: %.4f USDT → user %d", amount, telegram_id)
 
                     try:
                         await app.bot.send_message(
                             chat_id=telegram_id,
-                            text=(
-                                f"✅ <b>Ricarica ricevuta!</b>\n\n"
-                                f"💵 <b>{amount:.4f} USDT</b> accreditati al tuo saldo."
-                            ),
+                            text=f"✅ <b>Ricarica ricevuta!</b>\n\n💵 <b>{amount:.4f} USDT</b> accreditati al tuo saldo.",
                             parse_mode="HTML",
                         )
                     except Exception:
@@ -138,53 +144,80 @@ async def cryptobot_invoice_poller(app: Application) -> None:
 
 
 # ──────────────────────────────────────────────
-# Conversation handler: task creation wizard
+# /start — handles both normal start and deep links
+# ──────────────────────────────────────────────
+
+async def start_router(update: Update, context) -> None:
+    args = context.args
+    if args and args[0].startswith("direct_"):
+        await handle_direct_deeplink(update, context)
+    else:
+        await start(update, context)
+
+
+# ──────────────────────────────────────────────
+# ConversationHandler: public task wizard
 # ──────────────────────────────────────────────
 
 def build_task_wizard() -> ConversationHandler:
+    media_filter = (
+        filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO
+    )
     return ConversationHandler(
         entry_points=[CallbackQueryHandler(start_task_wizard, pattern="^start_task_wizard$")],
         states={
-            TASK_TITLE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, task_title_received)
-            ],
-            TASK_CATEGORY: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, task_category_received)
-            ],
-            TASK_DEADLINE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, task_deadline_received)
-            ],
+            TASK_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, task_title_received)],
+            TASK_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, task_category_received)],
+            TASK_DEADLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, task_deadline_received)],
             TASK_ATTACHMENTS: [
-                MessageHandler(
-                    (filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.TEXT) & ~filters.COMMAND,
-                    task_attachment_received,
-                )
+                MessageHandler((media_filter | filters.TEXT) & ~filters.COMMAND, task_attachment_received)
             ],
-            TASK_REWARD: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, task_reward_received)
-            ],
+            TASK_REWARD: [MessageHandler(filters.TEXT & ~filters.COMMAND, task_reward_received)],
         },
         fallbacks=[
             MessageHandler(filters.Regex("^❌ Annulla$"), cancel_wizard),
-            CommandHandler("start", start),
+            CommandHandler("start", start_router),
         ],
         allow_reentry=True,
     )
 
 
 # ──────────────────────────────────────────────
-# Text router: handles menu button presses
+# ConversationHandler: direct deal wizard
+# ──────────────────────────────────────────────
+
+def build_direct_wizard() -> ConversationHandler:
+    media_filter = (
+        filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO
+    )
+    return ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex("^🤝 Nuovo Affare Diretto$"), direct_start)],
+        states={
+            DIRECT_TARGET: [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_target_received)],
+            DIRECT_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_title_received)],
+            DIRECT_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_category_received)],
+            DIRECT_DEADLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_deadline_received)],
+            DIRECT_ATTACHMENTS: [
+                MessageHandler((media_filter | filters.TEXT) & ~filters.COMMAND, direct_attachment_received)
+            ],
+            DIRECT_REWARD: [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_reward_received)],
+        },
+        fallbacks=[
+            MessageHandler(filters.Regex("^❌ Annulla$"), direct_cancel),
+            CommandHandler("start", start_router),
+        ],
+        allow_reentry=True,
+    )
+
+
+# ──────────────────────────────────────────────
+# Text router: Reply Keyboard + active deal proxy
 # ──────────────────────────────────────────────
 
 async def text_router(update: Update, context) -> None:
-    """Routes Reply Keyboard menu button presses."""
     text = update.message.text
 
-    # Block if user is in active deal session (proxy routing takes priority)
-    from database import get_session_by_user
-    session = await get_session_by_user(update.effective_user.id)
-
-    # Check pending topup states
+    # Pending top-up input states take priority
     if context.user_data.get("awaiting_crypto_topup"):
         await handle_crypto_amount(update, context)
         return
@@ -196,32 +229,22 @@ async def text_router(update: Update, context) -> None:
         await area_committente(update, context)
     elif text == "🛠️ Area Esecutore":
         await area_esecutore(update, context)
-    elif text == "🤝 Nuovo Affare Diretto":
-        await update.message.reply_text(
-            "🤝 <b>Nuovo Affare Diretto</b>\n\n"
-            "Inserisci lo <b>username Telegram</b> dell'esecutore con cui vuoi lavorare "
-            "(es. <code>@mario_rossi</code>):",
-            parse_mode="HTML",
-        )
-        context.user_data["awaiting_direct_target"] = True
     elif text == "💰 Portafoglio":
         await portafoglio(update, context)
     elif text == "📂 I Miei Chat":
         await my_chats(update, context)
-    elif text == "🌐 Apri Mini App":
-        await open_mini_app(update, context)
     elif text == "ℹ️ Supporto":
         await support(update, context)
-    elif session:
-        # Active deal: proxy the message
-        await route_message(update, context)
     else:
-        # Fall through — unknown text
-        pass
+        # Check if user is in an active deal — route through proxy
+        from database import get_session_by_user
+        session = await get_session_by_user(update.effective_user.id)
+        if session:
+            await route_message(update, context)
 
 
 # ──────────────────────────────────────────────
-# Main application assembly
+# Application init
 # ──────────────────────────────────────────────
 
 async def post_init(app: Application) -> None:
@@ -241,36 +264,44 @@ def main() -> None:
         .build()
     )
 
-    # Task creation wizard (ConversationHandler — must be registered before generic handlers)
+    # ConversationHandlers first (highest priority)
     app.add_handler(build_task_wizard())
+    app.add_handler(build_direct_wizard())
 
     # Commands
-    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("start", start_router))
     app.add_handler(CommandHandler("prelievo", prelievo))
     app.add_handler(CommandHandler("stats", admin_stats))
 
-    # Callback queries
-    app.add_handler(CallbackQueryHandler(claim_task_callback, pattern=r"^claim_\d+$"))
-    app.add_handler(CallbackQueryHandler(complete_task_callback, pattern=r"^complete_\d+$"))
-    app.add_handler(CallbackQueryHandler(open_dispute_callback, pattern=r"^dispute_\d+$"))
-    app.add_handler(CallbackQueryHandler(admin_release_executor, pattern=r"^adm_exec_\d+$"))
-    app.add_handler(CallbackQueryHandler(admin_refund_client, pattern=r"^adm_client_\d+$"))
-    app.add_handler(CallbackQueryHandler(topup_crypto_callback, pattern="^topup_crypto$"))
-    app.add_handler(CallbackQueryHandler(topup_stars_callback, pattern="^topup_stars$"))
-    app.add_handler(CallbackQueryHandler(my_tasks_client_callback, pattern="^my_tasks_client$"))
-    app.add_handler(CallbackQueryHandler(my_tasks_executor_callback, pattern="^my_tasks_executor$"))
+    # Inline callback queries
+    app.add_handler(CallbackQueryHandler(claim_task_callback,       pattern=r"^claim_\d+$"))
+    app.add_handler(CallbackQueryHandler(complete_task_callback,    pattern=r"^complete_\d+$"))
+    app.add_handler(CallbackQueryHandler(open_dispute_callback,     pattern=r"^dispute_\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_release_executor,    pattern=r"^adm_exec_\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_refund_client,       pattern=r"^adm_client_\d+$"))
+    app.add_handler(CallbackQueryHandler(topup_crypto_callback,     pattern="^topup_crypto$"))
+    app.add_handler(CallbackQueryHandler(topup_stars_callback,      pattern="^topup_stars$"))
+    app.add_handler(CallbackQueryHandler(my_tasks_client_callback,  pattern="^my_tasks_client$"))
+    app.add_handler(CallbackQueryHandler(my_tasks_executor_callback,pattern="^my_tasks_executor$"))
+    app.add_handler(CallbackQueryHandler(direct_accept_callback,    pattern=r"^direct_accept_\d+_\w+$"))
+    app.add_handler(CallbackQueryHandler(direct_decline_callback,   pattern=r"^direct_decline_\d+_\w+$"))
 
-    # Payments (Telegram Stars)
+    # Payments
     app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
 
-    # Mini App web_app_data
-    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data_handler))
-
-    # Generic text router (handles Reply Keyboard + proxy)
+    # Generic text + media router (Reply Keyboard & proxy)
     app.add_handler(
         MessageHandler(
-            (filters.TEXT | filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.Sticker.ALL)
+            (
+                filters.TEXT
+                | filters.Document.ALL
+                | filters.PHOTO
+                | filters.VIDEO
+                | filters.AUDIO
+                | filters.VOICE
+                | filters.Sticker.ALL
+            )
             & ~filters.COMMAND,
             text_router,
         )

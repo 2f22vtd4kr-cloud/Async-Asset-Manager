@@ -1,12 +1,10 @@
 from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
-from config import MINI_APP_URL
 
 MAIN_MENU = ReplyKeyboardMarkup(
     [
         ["💼 Area Committente", "🛠️ Area Esecutore"],
         ["🤝 Nuovo Affare Diretto", "💰 Portafoglio"],
-        ["📂 I Miei Chat", "🌐 Apri Mini App"],
-        ["ℹ️ Supporto"],
+        ["📂 I Miei Chat", "ℹ️ Supporto"],
     ],
     resize_keyboard=True,
     one_time_keyboard=False,
@@ -77,9 +75,12 @@ def topup_method_kb() -> InlineKeyboardMarkup:
     )
 
 
-def mini_app_kb() -> InlineKeyboardMarkup:
+def direct_deal_offer_kb(task_id: int, token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("🌐 Apri Mini App", web_app={"url": MINI_APP_URL})]]
+        [
+            [InlineKeyboardButton("✅ Accetta l'incarico", callback_data=f"direct_accept_{task_id}_{token}")],
+            [InlineKeyboardButton("❌ Rifiuta", callback_data=f"direct_decline_{task_id}_{token}")],
+        ]
     )
 
 
