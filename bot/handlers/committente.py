@@ -5,124 +5,135 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, Labeled
 from telegram.ext import ContextTypes, ConversationHandler
 from config import TELEGRAM_CHANNEL_ID, PLATFORM_FEE_RATE, STAR_TO_USDT_RATE
 from keyboards import (
-    MAIN_MENU, CANCEL_KB, CATEGORY_KB, task_channel_kb,
-    skip_attachments_kb, task_payment_kb,
+    main_menu, cancel_kb, category_kb,
+    task_channel_kb, skip_attachments_kb, task_payment_kb,
 )
 from states import TASK_TITLE, TASK_CATEGORY, TASK_DEADLINE, TASK_ATTACHMENTS, TASK_REWARD
 from utils import validate_reward, calc_net_reward, calc_stars_for_usdt, is_blocked_file
+from strings import STRINGS, get_lang
 import database as db
 
 logger = logging.getLogger(__name__)
 
 
-# ──────────────────────────────────────────────
-# Auftraggeber-Dashboard
-# ──────────────────────────────────────────────
-
 async def area_committente(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
+    lang = await get_lang(user_id, context)
+    s = STRINGS[lang]
+
     user = await db.get_user(user_id)
-    bal = user["balance_usdt"] if user else 0.0
+    bal    = user["balance_usdt"] if user else 0.0
     frozen = user["frozen_usdt"] if user else 0.0
-    tasks = await db.get_user_tasks_as_client(user_id)
-    open_tasks = [t for t in tasks if t["status"] == "open"]
+    tasks  = await db.get_user_tasks_as_client(user_id)
+    open_tasks   = [t for t in tasks if t["status"] == "open"]
     active_tasks = [t for t in tasks if t["status"] == "in_progress"]
-    rating = user["client_rating"] if user else 5.0
+    rating  = user["client_rating"] if user else 5.0
     reviews = user["client_reviews_count"] if user else 0
+
     text = (
-        "💼 <b>Auftraggeber-Bereich</b>\n\n"
-        f"💰 Verfügbares Guthaben: <b>{bal:.2f} USDT</b>\n"
-        f"🔒 Im Treuhand: <b>{frozen:.2f} USDT</b>\n"
-        f"⭐ Bewertung: <b>{rating:.1f}/5.0</b> ({reviews} Bewertungen)\n\n"
-        f"📋 Offene Aufträge: {len(open_tasks)}\n"
-        f"⚙️ Laufende Aufträge: {len(active_tasks)}\n\n"
-        "Nutze <b>Auftrag veröffentlichen</b>, um einen neuen Job zu erstellen."
+        f"{s['client_header']}\n\n"
+        f"{s['balance_avail']}: <b>{bal:.2f} USDT</b>\n"
+        f"{s['balance_frozen']}: <b>{frozen:.2f} USDT</b>\n"
+        f"{s['rating_line']}: <b>{rating:.1f}/5.0</b> ({reviews} {s['reviews_label']})\n\n"
+        f"{s['open_tasks_line']}: {len(open_tasks)}\n"
+        f"{s['active_tasks_line']}: {len(active_tasks)}\n\n"
+        f"{s['publish_hint']}"
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📝 Auftrag veröffentlichen", callback_data="start_task_wizard")],
-        [InlineKeyboardButton("📋 Meine Aufträge", callback_data="my_tasks_client")],
+        [InlineKeyboardButton(s["btn_publish_task"], callback_data="start_task_wizard")],
+        [InlineKeyboardButton(s["btn_my_tasks"],     callback_data="my_tasks_client")],
     ])
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
 
-# ──────────────────────────────────────────────
-# 4-Schritt Auftrags-Assistent
-# ──────────────────────────────────────────────
-
 async def start_task_wizard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
+    user_id = update.effective_user.id
+    lang = await get_lang(user_id, context)
+    s = STRINGS[lang]
+
     if query:
         await query.answer()
         send = query.message.reply_text
     else:
         send = update.message.reply_text
 
-    context.user_data.clear()
     context.user_data["attachments"] = []
 
     await send(
-        "📝 <b>Schritt 1/4 — Aufragstitel</b>\n\n"
-        "Schreibe einen klaren und prägnanten Titel für deinen Auftrag:",
+        s["wiz_step1"],
         parse_mode="HTML",
-        reply_markup=CANCEL_KB,
+        reply_markup=cancel_kb(lang),
     )
     return TASK_TITLE
 
 
 async def task_title_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Abbrechen":
+    user_id = update.effective_user.id
+    lang = await get_lang(user_id, context)
+    s = STRINGS[lang]
+    text = update.message.text
+
+    from strings import all_cancel_texts
+    if text in all_cancel_texts():
         return await cancel_wizard(update, context)
 
-    title = update.message.text.strip()
+    title = text.strip()
     if len(title) < 5 or len(title) > 200:
-        await update.message.reply_text(
-            "⚠️ Der Titel muss zwischen 5 und 200 Zeichen lang sein. Nochmal versuchen:",
-            reply_markup=CANCEL_KB,
-        )
+        await update.message.reply_text(s["wiz_title_err"], reply_markup=cancel_kb(lang))
         return TASK_TITLE
 
     context.user_data["title"] = title
     await update.message.reply_text(
-        "🏷 <b>Schritt 2/4 — Kategorie & Frist</b>\n\nWähle die Kategorie:",
-        parse_mode="HTML",
-        reply_markup=CATEGORY_KB,
+        s["wiz_step2"], parse_mode="HTML", reply_markup=category_kb(lang)
     )
     return TASK_CATEGORY
 
 
 async def task_category_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Abbrechen":
+    user_id = update.effective_user.id
+    lang = await get_lang(user_id, context)
+    s = STRINGS[lang]
+    text = update.message.text
+
+    from strings import all_cancel_texts
+    if text in all_cancel_texts():
         return await cancel_wizard(update, context)
 
-    context.user_data["category"] = update.message.text
+    context.user_data["category"] = text
     await update.message.reply_text(
-        "📅 Gib die <b>Frist</b> des Auftrags ein\n(z.B. <i>15. Juli 2025</i> oder <i>innerhalb von 3 Tagen</i>):",
-        parse_mode="HTML",
-        reply_markup=CANCEL_KB,
+        s["wiz_deadline"], parse_mode="HTML", reply_markup=cancel_kb(lang)
     )
     return TASK_DEADLINE
 
 
 async def task_deadline_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Abbrechen":
+    user_id = update.effective_user.id
+    lang = await get_lang(user_id, context)
+    s = STRINGS[lang]
+    text = update.message.text
+
+    from strings import all_cancel_texts
+    if text in all_cancel_texts():
         return await cancel_wizard(update, context)
 
-    context.user_data["deadline"] = update.message.text.strip()
+    context.user_data["deadline"] = text.strip()
     await update.message.reply_text(
-        "📎 <b>Schritt 3/4 — Anhänge</b>\n\n"
-        "Sende Dateien, Bilder oder Dokumente (bis zu 50 MB pro Datei).\n"
-        "Wenn du fertig bist, drücke <b>⏭ Anhänge überspringen</b>.",
-        parse_mode="HTML",
-        reply_markup=skip_attachments_kb(),
+        s["wiz_step3"], parse_mode="HTML", reply_markup=skip_attachments_kb(lang)
     )
     return TASK_ATTACHMENTS
 
 
 async def task_attachment_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Abbrechen":
-        return await cancel_wizard(update, context)
+    user_id = update.effective_user.id
+    lang = await get_lang(user_id, context)
+    s = STRINGS[lang]
+    text = update.message.text or ""
 
-    if update.message.text == "⏭ Anhänge überspringen":
+    from strings import all_cancel_texts, all_skip_texts
+    if text in all_cancel_texts():
+        return await cancel_wizard(update, context)
+    if text in all_skip_texts():
         return await proceed_to_reward(update, context)
 
     file_id = None
@@ -133,8 +144,7 @@ async def task_attachment_received(update: Update, context: ContextTypes.DEFAULT
         file_name = doc.file_name or ""
         if is_blocked_file(file_name):
             await update.message.reply_text(
-                f"🚫 Datei <code>{file_name}</code> aus Sicherheitsgründen nicht erlaubt.",
-                parse_mode="HTML",
+                s["wiz_file_blocked"].format(name=file_name), parse_mode="HTML"
             )
             return TASK_ATTACHMENTS
         file_id = doc.file_id
@@ -148,42 +158,42 @@ async def task_attachment_received(update: Update, context: ContextTypes.DEFAULT
     if file_id:
         atts = context.user_data.setdefault("attachments", [])
         if len(atts) >= 10:
-            await update.message.reply_text("⚠️ Maximal 10 Anhänge. Drücke ⏭ zum Fortfahren.")
+            await update.message.reply_text(s["wiz_max_att"])
             return TASK_ATTACHMENTS
         atts.append(file_id)
         await update.message.reply_text(
-            f"✅ Anhang {len(atts)}/10 empfangen. Weitere senden oder ⏭ drücken.",
-            reply_markup=skip_attachments_kb(),
+            s["wiz_att_ok"].format(n=len(atts)),
+            reply_markup=skip_attachments_kb(lang),
         )
     else:
-        await update.message.reply_text(
-            "⚠️ Unbekannter Dateityp. Sende ein Dokument, Foto, Video oder Audio.",
-        )
+        await update.message.reply_text(s["wiz_file_unknown"])
     return TASK_ATTACHMENTS
 
 
 async def proceed_to_reward(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_id = update.effective_user.id
+    lang = await get_lang(user_id, context)
+    s = STRINGS[lang]
     await update.message.reply_text(
-        "💰 <b>Schritt 4/4 — Bruttovergütung</b>\n\n"
-        "Gib die Vergütung in <b>USDT</b> ein, die du anbieten möchtest.\n"
-        "⚠️ 90% gehen bei Abschluss an den Auftragnehmer (10% Plattformgebühr).\n\n"
-        "Du kannst den Treuhandbetrag mit deinem USDT-Guthaben <b>oder</b> mit <b>Telegram Stars</b> bezahlen.",
-        parse_mode="HTML",
-        reply_markup=CANCEL_KB,
+        s["wiz_step4"], parse_mode="HTML", reply_markup=cancel_kb(lang)
     )
     return TASK_REWARD
 
 
 async def task_reward_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Abbrechen":
+    user_id = update.effective_user.id
+    lang = await get_lang(user_id, context)
+    s = STRINGS[lang]
+    text = update.message.text
+
+    from strings import all_cancel_texts
+    if text in all_cancel_texts():
         return await cancel_wizard(update, context)
 
-    gross = validate_reward(update.message.text)
+    gross = validate_reward(text)
     if gross is None:
         await update.message.reply_text(
-            "⚠️ Ungültiger Betrag. Gib eine positive Zahl ein (z.B. <code>15.00</code>):",
-            parse_mode="HTML",
-            reply_markup=CANCEL_KB,
+            s["wiz_reward_err"], parse_mode="HTML", reply_markup=cancel_kb(lang)
         )
         return TASK_REWARD
 
@@ -192,45 +202,40 @@ async def task_reward_received(update: Update, context: ContextTypes.DEFAULT_TYP
     ud = context.user_data
 
     context.user_data["pending_task"] = {
-        "title": ud.get("title", ""),
-        "category": ud.get("category", "🌐 Allgemein"),
-        "deadline": ud.get("deadline", "k.A."),
+        "title":       ud.get("title", ""),
+        "category":    ud.get("category", s["cat_general"]),
+        "deadline":    ud.get("deadline", s["na"]),
         "attachments": json.dumps(ud.get("attachments", [])),
-        "gross": gross,
-        "net": net,
+        "gross":       gross,
+        "net":         net,
     }
 
-    user = await db.get_user(update.effective_user.id)
+    user = await db.get_user(user_id)
     bal = user["balance_usdt"] if user else 0.0
 
     await update.message.reply_text(
-        f"💳 <b>Treuhand-Zahlungsmethode</b>\n\n"
-        f"Bruttovergütung: <b>{gross:.2f} USDT</b>\n"
-        f"Netto Auftragnehmer: <b>{net:.2f} USDT</b>\n\n"
-        f"💵 Dein USDT-Guthaben: <b>{bal:.2f}</b>\n"
-        f"⭐ Stars-Äquivalent: <b>{stars_needed} Stars</b>\n\n"
-        "Wähle die Zahlungsmethode:",
+        f"{s['pay_method']}\n\n"
+        f"{s['pay_gross']}: <b>{gross:.2f} USDT</b>\n"
+        f"{s['pay_net']}: <b>{net:.2f} USDT</b>\n\n"
+        f"{s['pay_balance']}: <b>{bal:.2f}</b>\n"
+        f"{s['pay_stars_equiv']}: <b>{stars_needed} Stars</b>\n\n"
+        f"{s['pay_choose']}",
         parse_mode="HTML",
-        reply_markup=task_payment_kb(),
+        reply_markup=task_payment_kb(lang),
     )
     return ConversationHandler.END
 
 
-# ──────────────────────────────────────────────
-# Zahlungs-Callbacks (außerhalb ConversationHandler)
-# ──────────────────────────────────────────────
-
 async def task_pay_usdt_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Pay for task escrow from internal USDT balance."""
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
+    lang = await get_lang(user_id, context)
+    s = STRINGS[lang]
 
     pending = context.user_data.get("pending_task")
     if not pending:
-        await query.message.reply_text(
-            "❌ Sitzung abgelaufen. Bitte Auftrag neu erstellen.", reply_markup=MAIN_MENU
-        )
+        await query.message.reply_text(s["pay_expired"], reply_markup=main_menu(lang))
         return
 
     gross = pending["gross"]
@@ -240,44 +245,38 @@ async def task_pay_usdt_callback(update: Update, context: ContextTypes.DEFAULT_T
     if not user or bal < gross:
         stars_needed = calc_stars_for_usdt(gross, STAR_TO_USDT_RATE)
         await query.message.reply_text(
-            f"❌ Unzureichendes Guthaben. Du hast <b>{bal:.2f} USDT</b>, "
-            f"der Auftrag erfordert jedoch <b>{gross:.2f} USDT</b>.\n\n"
-            f"Du kannst über 💰 Wallet aufladen oder mit "
-            f"<b>{stars_needed} Telegram Stars</b> zahlen:",
+            s["pay_insufficient"].format(bal=bal, gross=gross, stars=stars_needed),
             parse_mode="HTML",
-            reply_markup=task_payment_kb(),
+            reply_markup=task_payment_kb(lang),
         )
         return
 
     ok = await db.freeze_funds(user_id, gross)
     if not ok:
-        await query.message.reply_text("❌ Fehler beim Einfrieren der Mittel. Bitte erneut versuchen.", reply_markup=MAIN_MENU)
+        await query.message.reply_text(s["pay_freeze_err"], reply_markup=main_menu(lang))
         return
 
     task_id = await _insert_task(user_id, pending)
     context.user_data.pop("pending_task", None)
-    await _post_to_channel(update.get_bot(), task_id, pending)
+    await _post_to_channel(update.get_bot(), task_id, pending, lang)
 
     await query.message.reply_text(
-        f"✅ <b>Auftrag veröffentlicht!</b>\n\n"
-        f"🆔 Auftrag #{task_id} — {pending['title']}\n"
-        f"💰 Im Treuhand eingefroren: <b>{gross:.2f} USDT</b>",
+        s["pay_published"].format(id=task_id, title=pending["title"], gross=gross),
         parse_mode="HTML",
-        reply_markup=MAIN_MENU,
+        reply_markup=main_menu(lang),
     )
 
 
 async def task_pay_stars_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Pay for task escrow with Telegram Stars."""
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
+    lang = await get_lang(user_id, context)
+    s = STRINGS[lang]
 
     pending = context.user_data.get("pending_task")
     if not pending:
-        await query.message.reply_text(
-            "❌ Sitzung abgelaufen. Bitte Auftrag neu erstellen.", reply_markup=MAIN_MENU
-        )
+        await query.message.reply_text(s["pay_expired"], reply_markup=main_menu(lang))
         return
 
     gross = pending["gross"]
@@ -286,24 +285,16 @@ async def task_pay_stars_callback(update: Update, context: ContextTypes.DEFAULT_
 
     await context.bot.send_invoice(
         chat_id=user_id,
-        title=f"Treuhand: {title_short}",
-        description=(
-            f"Auftrag auf Fai un Salto veröffentlichen\n"
-            f"Treuhandbetrag: {gross:.2f} USDT"
-        ),
+        title=f"Escrow: {title_short}",
+        description=s["pay_stars_desc"].format(gross=gross),
         payload=f"task_stars_{user_id}",
         currency="XTR",
-        prices=[LabeledPrice(label="Stars für Treuhand", amount=stars_needed)],
+        prices=[LabeledPrice(label=s["pay_stars_label"], amount=stars_needed)],
         provider_token="",
     )
 
 
-# ──────────────────────────────────────────────
-# Hilfsfunktionen
-# ──────────────────────────────────────────────
-
 async def _insert_task(client_id: int, pending: dict) -> int:
-    """Insert a task row and return the new task_id."""
     import aiosqlite
     from database import DB_PATH
     async with aiosqlite.connect(DB_PATH) as conn:
@@ -327,28 +318,29 @@ async def _insert_task(client_id: int, pending: dict) -> int:
     return task_id
 
 
-async def _post_to_channel(bot, task_id: int, pending: dict) -> None:
-    """Post a task card to the public channel."""
+async def _post_to_channel(bot, task_id: int, pending: dict, lang: str = "de") -> None:
     import aiosqlite
     from database import DB_PATH
+    from strings import STRINGS
+    s = STRINGS.get(lang, STRINGS["de"])
     gross = pending["gross"]
-    net = pending["net"]
+    net   = pending["net"]
     title = pending["title"]
-    category = pending.get("category", "🌐 Allgemein")
-    deadline = pending.get("deadline", "k.A.")
+    category = pending.get("category", s["cat_general"])
+    deadline = pending.get("deadline", s["na"])
 
     channel_text = (
-        f"📋 <b>{title}</b> #Auftrag\n\n"
+        f"📋 <b>{title}</b> {s['channel_tag']}\n\n"
         f"🏷 {category} | 📅 {deadline}\n"
-        f"💰 Vergütung: <b>{gross:.2f} USDT</b> (netto: {net:.2f})\n\n"
-        f"🆔 Auftrag #{task_id}"
+        f"💰 {s['pay_gross']}: <b>{gross:.2f} USDT</b> (net: {net:.2f})\n\n"
+        f"{s['summary_id']}: <code>{task_id}</code>"
     )
     try:
         msg = await bot.send_message(
             chat_id=TELEGRAM_CHANNEL_ID,
             text=channel_text,
             parse_mode="HTML",
-            reply_markup=task_channel_kb(task_id),
+            reply_markup=task_channel_kb(task_id, lang),
         )
         async with aiosqlite.connect(DB_PATH) as conn:
             await conn.execute(
@@ -357,31 +349,28 @@ async def _post_to_channel(bot, task_id: int, pending: dict) -> None:
             )
             await conn.commit()
     except Exception as e:
-        logger.error("Fehler beim Veröffentlichen im Kanal: %s", e)
+        logger.error("Channel publish error: %s", e)
 
-
-# ──────────────────────────────────────────────
-# Assistent abbrechen
-# ──────────────────────────────────────────────
 
 async def cancel_wizard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    lang = await get_lang(update.effective_user.id, context)
+    s = STRINGS[lang]
     context.user_data.clear()
-    await update.message.reply_text("❌ Vorgang abgebrochen.", reply_markup=MAIN_MENU)
+    await update.message.reply_text(s["wiz_cancelled"], reply_markup=main_menu(lang))
     return ConversationHandler.END
 
-
-# ──────────────────────────────────────────────
-# Meine Aufträge (Inline-Callback)
-# ──────────────────────────────────────────────
 
 async def my_tasks_client_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
+    lang = await get_lang(user_id, context)
+    s = STRINGS[lang]
+
     tasks = await db.get_user_tasks_as_client(user_id)
     if not tasks:
-        await query.message.reply_text("📋 Noch keine Aufträge veröffentlicht.")
+        await query.message.reply_text(s["no_tasks_client"])
         return
     from utils import format_task_summary
     for t in tasks[:10]:
-        await query.message.reply_text(format_task_summary(t), parse_mode="HTML")
+        await query.message.reply_text(format_task_summary(t, lang), parse_mode="HTML")

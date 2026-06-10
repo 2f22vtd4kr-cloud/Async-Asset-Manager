@@ -6,14 +6,6 @@ logger = logging.getLogger(__name__)
 
 BLOCKED_EXTENSIONS = {".exe", ".sh", ".bat", ".cmd", ".ps1", ".vbs", ".msi", ".jar"}
 
-STATUS_LABELS = {
-    "open": "🟢 Offen",
-    "in_progress": "🟡 In Bearbeitung",
-    "completed": "✅ Abgeschlossen",
-    "dispute": "🔴 Streitfall",
-    "cancelled": "❌ Storniert",
-}
-
 
 def setup_logging() -> None:
     logging.basicConfig(
@@ -23,20 +15,15 @@ def setup_logging() -> None:
 
 
 def is_blocked_file(file_name: str) -> bool:
-    """Return True if the filename has a dangerous extension."""
     _, ext = (file_name.rsplit(".", 1) if "." in file_name else (file_name, ""))
     return f".{ext.lower()}" in BLOCKED_EXTENSIONS
 
 
 def validate_reward(text: str) -> Optional[float]:
-    """Parse and validate a USDT reward amount. Returns float or None."""
     text = text.strip().replace(",", ".")
     try:
         value = float(text)
-        if value <= 0:
-            return None
-        # Max safety cap: 10,000 USDT
-        if value > 10_000:
+        if value <= 0 or value > 10_000:
             return None
         return round(value, 2)
     except ValueError:
@@ -44,25 +31,35 @@ def validate_reward(text: str) -> Optional[float]:
 
 
 def calc_net_reward(gross: float, fee_rate: float = 0.10) -> float:
-    """Return executor's net reward after platform fee."""
     return round(gross * (1 - fee_rate), 8)
 
 
 def calc_stars_for_usdt(usdt_amount: float, rate: float = 0.02) -> int:
-    """Return number of Telegram Stars needed to top up `usdt_amount` USDT."""
     return max(1, int(usdt_amount / rate))
 
 
-def format_task_summary(task: dict) -> str:
-    status_label = STATUS_LABELS.get(task.get("status", ""), task.get("status", ""))
+def format_task_summary(task: dict, lang: str = "de") -> str:
+    from strings import STRINGS, DEFAULT_LANG
+    s = STRINGS.get(lang, STRINGS[DEFAULT_LANG])
+
+    status_map = {
+        "open":        s["status_open"],
+        "in_progress": s["status_in_progress"],
+        "completed":   s["status_completed"],
+        "dispute":     s["status_dispute"],
+        "cancelled":   s["status_cancelled"],
+    }
+    status_label = status_map.get(task.get("status", ""), task.get("status", ""))
+    na = s["na"]
+
     lines = [
         f"📋 <b>{task['title']}</b>",
-        f"🏷 Kategorie: {task.get('category', 'Allgemein')}",
-        f"📅 Frist: {task.get('deadline', 'k.A.')}",
-        f"💰 Bruttovergütung: <b>{task['reward_gross']:.2f} USDT</b>",
-        f"💵 Netto Auftragnehmer: <b>{task['reward_net']:.2f} USDT</b>",
-        f"🔖 Status: {status_label}",
-        f"🆔 Auftrags-ID: <code>{task['task_id']}</code>",
+        f"{s['summary_category']}: {task.get('category', s['cat_general'])}",
+        f"{s['summary_deadline']}: {task.get('deadline', na)}",
+        f"{s['summary_gross']}: <b>{task['reward_gross']:.2f} USDT</b>",
+        f"{s['summary_net']}: <b>{task['reward_net']:.2f} USDT</b>",
+        f"{s['summary_status']}: {status_label}",
+        f"{s['summary_id']}: <code>{task['task_id']}</code>",
     ]
     if task.get("description"):
         lines.insert(1, f"📝 {task['description']}")
@@ -70,5 +67,4 @@ def format_task_summary(task: dict) -> str:
 
 
 def strip_username_mentions(text: str) -> str:
-    """Remove @username mentions to protect privacy."""
-    return re.sub(r"@\w+", "[Nutzer]", text)
+    return re.sub(r"@\w+", "[?]", text)

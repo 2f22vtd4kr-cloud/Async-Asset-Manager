@@ -20,13 +20,17 @@ from telegram.ext import (
 from config import BOT_TOKEN, CRYPTOBOT_TOKEN
 from database import init_db, get_user, credit_balance
 from utils import setup_logging
+from strings import STRINGS, DEFAULT_LANG
 from states import (
     TASK_TITLE, TASK_CATEGORY, TASK_DEADLINE, TASK_ATTACHMENTS, TASK_REWARD,
     DIRECT_TARGET, DIRECT_TITLE, DIRECT_CATEGORY, DIRECT_DEADLINE,
     DIRECT_ATTACHMENTS, DIRECT_REWARD,
 )
 
-from handlers.common import start, support, my_chats, unknown_command
+from handlers.common import (
+    start, support, my_chats, unknown_command,
+    language_command, set_language_callback,
+)
 from handlers.committente import (
     area_committente,
     start_task_wizard,
@@ -81,6 +85,26 @@ logger = logging.getLogger(__name__)
 
 CRYPTOBOT_API = "https://pay.crypt.bot/api"
 
+# ── Build a combined lookup: any button text (EN or DE) → handler ──────────
+_BTN_ROUTES = {}
+for _lang in ("en", "de"):
+    _s = STRINGS[_lang]
+    _BTN_ROUTES[_s["btn_client"]]   = lambda u, c: area_committente(u, c)
+    _BTN_ROUTES[_s["btn_executor"]] = lambda u, c: area_esecutore(u, c)
+    _BTN_ROUTES[_s["btn_wallet"]]   = lambda u, c: portafoglio(u, c)
+    _BTN_ROUTES[_s["btn_chats"]]    = lambda u, c: my_chats(u, c)
+    _BTN_ROUTES[_s["btn_support"]]  = lambda u, c: support(u, c)
+    _BTN_ROUTES[_s["btn_language"]] = lambda u, c: language_command(u, c)
+
+# Build a cancel regex that matches ALL languages
+_ALL_CANCEL = "|".join(
+    STRINGS[l]["btn_cancel"].replace("❌ ", "❌ ") for l in STRINGS
+)
+_CANCEL_RE = "^(" + "|".join(STRINGS[l]["btn_cancel"] for l in STRINGS) + ")$"
+
+# Build a direct deal entry regex that matches ALL languages
+_DIRECT_RE = "^(" + "|".join(STRINGS[l]["btn_direct"] for l in STRINGS) + ")$"
+
 
 # ──────────────────────────────────────────────
 # CryptoBot invoice poller (background)
@@ -130,10 +154,14 @@ async def cryptobot_invoice_poller(app: Application) -> None:
                     await credit_balance(telegram_id, amount)
                     logger.info("CryptoBot topup: %.4f USDT → user %d", amount, telegram_id)
 
+                    # Notify in user's language
+                    from database import get_user_language
+                    lang = await get_user_language(telegram_id) or DEFAULT_LANG
+                    s = STRINGS[lang]
                     try:
                         await app.bot.send_message(
                             chat_id=telegram_id,
-                            text=f"✅ <b>Ricarica ricevuta!</b>\n\n💵 <b>{amount:.4f} USDT</b> accreditati al tuo saldo.",
+                            text=s["cryptobot_topup_ok"].format(amount=amount),
                             parse_mode="HTML",
                         )
                     except Exception:
@@ -173,7 +201,7 @@ def build_task_wizard() -> ConversationHandler:
             TASK_REWARD:      [MessageHandler(filters.TEXT & ~filters.COMMAND, task_reward_received)],
         },
         fallbacks=[
-            MessageHandler(filters.Regex("^❌ Abbrechen$"), cancel_wizard),
+            MessageHandler(filters.Regex(_CANCEL_RE), cancel_wizard),
             CommandHandler("start", start_router),
         ],
         allow_reentry=True,
@@ -187,7 +215,7 @@ def build_task_wizard() -> ConversationHandler:
 def build_direct_wizard() -> ConversationHandler:
     media = filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO
     return ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^🤝 Neues Direktgeschäft$"), direct_start)],
+        entry_points=[MessageHandler(filters.Regex(_DIRECT_RE), direct_start)],
         states={
             DIRECT_TARGET:      [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_target_received)],
             DIRECT_TITLE:       [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_title_received)],
@@ -197,7 +225,7 @@ def build_direct_wizard() -> ConversationHandler:
             DIRECT_REWARD:      [MessageHandler(filters.TEXT & ~filters.COMMAND, direct_reward_received)],
         },
         fallbacks=[
-            MessageHandler(filters.Regex("^❌ Abbrechen$"), direct_cancel),
+            MessageHandler(filters.Regex(_CANCEL_RE), direct_cancel),
             CommandHandler("start", start_router),
         ],
         allow_reentry=True,
@@ -209,9 +237,9 @@ def build_direct_wizard() -> ConversationHandler:
 # ──────────────────────────────────────────────
 
 async def text_router(update: Update, context) -> None:
-    text = update.message.text
+    text = update.message.text if update.message else None
 
-    # Pending top-up input takes priority
+    # Pending top-up inputs take priority
     if context.user_data.get("awaiting_crypto_topup"):
         await handle_crypto_amount(update, context)
         return
@@ -219,22 +247,16 @@ async def text_router(update: Update, context) -> None:
         await handle_stars_amount(update, context)
         return
 
-    if text == "💼 Auftraggeber-Bereich":
-        await area_committente(update, context)
-    elif text == "🛠️ Auftragnehmer-Bereich":
-        await area_esecutore(update, context)
-    elif text == "💰 Wallet":
-        await portafoglio(update, context)
-    elif text == "📂 Meine Chats":
-        await my_chats(update, context)
-    elif text == "ℹ️ Support":
-        await support(update, context)
-    else:
-        # Check active deal session — route through anonymous proxy
-        from database import get_session_by_user
-        session = await get_session_by_user(update.effective_user.id)
-        if session:
-            await route_message(update, context)
+    # Main menu button dispatch (works for both EN and DE)
+    if text and text in _BTN_ROUTES:
+        await _BTN_ROUTES[text](update, context)
+        return
+
+    # Not a menu button → check if user is in an active deal session
+    from database import get_session_by_user
+    session = await get_session_by_user(update.effective_user.id)
+    if session:
+        await route_message(update, context)
 
 
 # ──────────────────────────────────────────────
@@ -249,7 +271,7 @@ async def post_init(app: Application) -> None:
 
 def main() -> None:
     setup_logging()
-    logger.info("🐸 Fai un Salto — avvio...")
+    logger.info("🐸 Fai un Salto — starting...")
 
     app = (
         Application.builder()
@@ -264,8 +286,12 @@ def main() -> None:
 
     # ── Commands ──────────────────────────────────────────────────────────
     app.add_handler(CommandHandler("start",    start_router))
+    app.add_handler(CommandHandler("language", language_command))
     app.add_handler(CommandHandler("prelievo", prelievo))
     app.add_handler(CommandHandler("stats",    admin_stats))
+
+    # ── Language selection callbacks ──────────────────────────────────────
+    app.add_handler(CallbackQueryHandler(set_language_callback, pattern="^set_lang_(en|de)$"))
 
     # ── Task lifecycle callbacks ──────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(claim_task_callback,       pattern=r"^claim_\d+$"))
@@ -320,7 +346,7 @@ def main() -> None:
     # ── Unknown commands ──────────────────────────────────────────────────
     app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
-    logger.info("Bot in polling...")
+    logger.info("Bot polling...")
     app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
 

@@ -26,6 +26,7 @@ async def init_db() -> None:
                 total_tasks_client INTEGER DEFAULT 0,
                 total_tasks_executor INTEGER DEFAULT 0,
                 notification_categories TEXT DEFAULT '[]',
+                language TEXT DEFAULT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -85,6 +86,12 @@ async def init_db() -> None:
             "INSERT OR IGNORE INTO admin_revenue (id, total_collected_fees) VALUES (1, 0.0)"
         )
         await db.commit()
+        # Migration: add language column to existing databases
+        try:
+            await db.execute("ALTER TABLE users ADD COLUMN language TEXT DEFAULT NULL")
+            await db.commit()
+        except Exception:
+            pass  # Column already exists
     logger.info("Database initialized.")
 
 
@@ -101,6 +108,26 @@ async def get_or_create_user(telegram_id: int, username: Optional[str] = None) -
         ) as cursor:
             row = await cursor.fetchone()
             return dict(row)
+
+
+async def get_user_language(telegram_id: int) -> Optional[str]:
+    """Return the stored language code or None if not yet set."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT language FROM users WHERE telegram_id = ?", (telegram_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row is None:
+                return None
+            return row[0]  # may be None if column is NULL
+
+
+async def set_user_language(telegram_id: int, lang: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE users SET language = ? WHERE telegram_id = ?", (lang, telegram_id)
+        )
+        await db.commit()
 
 
 async def get_user(telegram_id: int) -> Optional[dict]:

@@ -3,8 +3,9 @@ import logging
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from config import TELEGRAM_CHANNEL_ID
-from keyboards import MAIN_MENU, executor_room_kb
-from utils import format_task_summary, STATUS_LABELS
+from keyboards import main_menu, client_room_kb, executor_room_kb
+from utils import format_task_summary
+from strings import STRINGS, DEFAULT_LANG, get_lang
 import database as db
 
 logger = logging.getLogger(__name__)
@@ -12,56 +13,56 @@ logger = logging.getLogger(__name__)
 
 async def area_esecutore(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
+    lang = await get_lang(user_id, context)
+    s = STRINGS[lang]
+
     user = await db.get_user(user_id)
-    bal = user["balance_usdt"] if user else 0.0
-    tasks = await db.get_user_tasks_as_executor(user_id)
-    active = [t for t in tasks if t["status"] == "in_progress"]
+    bal    = user["balance_usdt"] if user else 0.0
+    tasks  = await db.get_user_tasks_as_executor(user_id)
+    active    = [t for t in tasks if t["status"] == "in_progress"]
     completed = [t for t in tasks if t["status"] == "completed"]
-    rating = user["executor_rating"] if user else 5.0
+    rating  = user["executor_rating"] if user else 5.0
     reviews = user["executor_reviews_count"] if user else 0
 
     text = (
-        "🛠️ <b>Auftragnehmer-Bereich</b>\n\n"
-        f"💰 Verfügbares Guthaben: <b>{bal:.2f} USDT</b>\n"
-        f"⭐ Bewertung: <b>{rating:.1f}/5.0</b> ({reviews} Bewertungen)\n\n"
-        f"⚙️ Aktive Aufträge: {len(active)}\n"
-        f"✅ Abgeschlossen: {len(completed)}\n\n"
-        "Besuche den Kanal, um neue verfügbare Aufträge zu finden."
+        f"{s['exec_header']}\n\n"
+        f"{s['balance_avail']}: <b>{bal:.2f} USDT</b>\n"
+        f"{s['rating_line']}: <b>{rating:.1f}/5.0</b> ({reviews} {s['reviews_label']})\n\n"
+        f"{s['exec_active']}: {len(active)}\n"
+        f"{s['exec_completed']}: {len(completed)}\n\n"
+        f"{s['exec_hint']}"
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📢 Zum Auftragskanal", url=f"https://t.me/c/{str(TELEGRAM_CHANNEL_ID).replace('-100', '')}")],
-        [InlineKeyboardButton("📋 Meine Aufträge", callback_data="my_tasks_executor")],
+        [InlineKeyboardButton(s["btn_channel"], url=f"https://t.me/c/{str(TELEGRAM_CHANNEL_ID).replace('-100', '')}")],
+        [InlineKeyboardButton(s["btn_my_tasks"], callback_data="my_tasks_executor")],
     ])
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
 
 async def claim_task_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle the inline button click from the channel post."""
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
+    lang = await get_lang(user_id, context)
+    s = STRINGS[lang]
     task_id = int(query.data.split("_", 1)[1])
 
     task = await db.get_task(task_id)
     if not task:
-        await query.answer("❌ Auftrag nicht gefunden.", show_alert=True)
+        await query.answer(s["exec_not_found"], show_alert=True)
         return
-
     if task["status"] != "open":
-        await query.answer("🔴 Dieser Auftrag ist nicht mehr verfügbar.", show_alert=True)
+        await query.answer(s["exec_unavailable"], show_alert=True)
         return
-
     if task["client_id"] == user_id:
-        await query.answer("⚠️ Du kannst deinen eigenen Auftrag nicht annehmen.", show_alert=True)
+        await query.answer(s["exec_own_task"], show_alert=True)
         return
 
-    # Check if user is shadow-banned
     executor = await db.get_or_create_user(user_id)
     if executor.get("is_shadow_banned"):
-        await query.answer("🚫 Vorgang nicht verfügbar.", show_alert=True)
+        await query.answer(s["exec_shadow_ban"], show_alert=True)
         return
 
-    # Atomically mark as in_progress
     import aiosqlite
     from database import DB_PATH
     async with aiosqlite.connect(DB_PATH) as conn:
@@ -70,7 +71,7 @@ async def claim_task_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         ) as cursor:
             row = await cursor.fetchone()
         if not row or row[0] != "open":
-            await query.answer("🔴 Auftrag bereits vergeben.", show_alert=True)
+            await query.answer(s["exec_taken"], show_alert=True)
             return
         await conn.execute("BEGIN")
         await conn.execute(
@@ -79,7 +80,6 @@ async def claim_task_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         await conn.execute("COMMIT")
 
-    # Update channel message: remove inline buttons, update caption
     task = await db.get_task(task_id)
     if task and task.get("channel_message_id"):
         try:
@@ -87,50 +87,40 @@ async def claim_task_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 chat_id=TELEGRAM_CHANNEL_ID,
                 message_id=task["channel_message_id"],
                 text=(
-                    f"📋 <b>{task['title']}</b> #Auftrag\n\n"
-                    f"🔴 <b>In Bearbeitung</b> — Auftrag vergeben\n"
-                    f"💰 Vergütung: {task['reward_gross']:.2f} USDT\n"
-                    f"🆔 Auftrag #{task_id}"
+                    f"📋 <b>{task['title']}</b>\n\n"
+                    f"{s['channel_in_progress']}\n"
+                    f"💰 {task['reward_gross']:.2f} USDT\n"
+                    f"{s['summary_id']}: <code>{task_id}</code>"
                 ),
                 parse_mode="HTML",
                 reply_markup=None,
             )
         except Exception as e:
-            logger.warning("Kanalpost konnte nicht aktualisiert werden: %s", e)
+            logger.warning(s["exec_cannot_update_channel"] if "exec_cannot_update_channel" in s else "Channel update failed: %s", e)
 
-    # Create deal session
     import uuid
     room_token = uuid.uuid4().hex
     await db.create_deal_session(task_id, task["client_id"], user_id, room_token)
 
-    # Notify both parties
     bot = update.get_bot()
-    notify_client = (
-        f"🤝 <b>Auftrag angenommen!</b>\n\n"
-        f"Auftrag #{task_id} — {task['title']}\n"
-        "Ein Auftragnehmer hat deinen Auftrag angenommen. Der Chat ist jetzt aktiv.\n"
-        "Schreibe hier, um anonym zu kommunizieren."
-    )
-    notify_executor = (
-        f"✅ <b>Auftrag übernommen!</b>\n\n"
-        f"Auftrag #{task_id} — {task['title']}\n"
-        f"💰 Nettovergütung: <b>{task['reward_net']:.2f} USDT</b>\n"
-        "Schreibe hier, um anonym mit dem Auftraggeber zu kommunizieren."
-    )
 
-    from keyboards import client_room_kb, executor_room_kb
+    # Notify client in their language
+    client_lang = await db.get_user_language(task["client_id"]) or DEFAULT_LANG
+    cs = STRINGS[client_lang]
     try:
         await bot.send_message(
             chat_id=task["client_id"],
-            text=notify_client,
+            text=cs["exec_client_msg"].format(id=task_id, title=task["title"]),
             parse_mode="HTML",
-            reply_markup=client_room_kb(task_id),
+            reply_markup=client_room_kb(task_id, client_lang),
         )
     except Exception as e:
-        logger.error("Auftraggeber konnte nicht benachrichtigt werden: %s", e)
+        logger.error("Could not notify client: %s", e)
 
     await query.message.reply_text(
-        notify_executor, parse_mode="HTML", reply_markup=executor_room_kb(task_id)
+        s["exec_executor_msg"].format(id=task_id, title=task["title"], net=task["reward_net"]),
+        parse_mode="HTML",
+        reply_markup=executor_room_kb(task_id, lang),
     )
 
 
@@ -138,9 +128,12 @@ async def my_tasks_executor_callback(update: Update, context: ContextTypes.DEFAU
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
+    lang = await get_lang(user_id, context)
+    s = STRINGS[lang]
+
     tasks = await db.get_user_tasks_as_executor(user_id)
     if not tasks:
-        await query.message.reply_text("📋 Noch keine Aufträge übernommen.")
+        await query.message.reply_text(s["exec_no_tasks"])
         return
     for t in tasks[:10]:
-        await query.message.reply_text(format_task_summary(t), parse_mode="HTML")
+        await query.message.reply_text(format_task_summary(t, lang), parse_mode="HTML")
